@@ -43,7 +43,7 @@ Las cuentas de clientes usan celular y clave. Para registrar y verificar cliente
 3. En **WhatsApp del taller**, escribe el código de país y el número, solo con dígitos. Para Colombia, escribe `57` seguido del número celular, por ejemplo `573001234567`.
 4. Pulsa **Guardar diseño y WhatsApp**. El número inicial ya queda configurado como `573214066140`; puedes cambiarlo desde este mismo campo si el taller usa otro.
 
-Las cotizaciones abren WhatsApp con los datos del proyecto listos para enviar y también se guardan en el panel cuando Supabase está disponible. El enlace de WhatsApp aparece además en el pie de página y como botón flotante.
+Las cotizaciones piden los datos de contacto y del proyecto, abren WhatsApp con esa información y quedan en **Administración → Cotizaciones**. No reservan ni bloquean fecha u hora. Solo una cita creada desde **Agenda** ocupa un horario; la persona debe elegir una hora disponible e ingresar con su cuenta de cliente.
 
 ## Lo que se puede administrar
 
@@ -51,7 +51,8 @@ Las cotizaciones abren WhatsApp con los datos del proyecto listos para enviar y 
 - **Diseño de página:** cambiar los colores, subir una imagen de portada y configurar el WhatsApp del taller. `MODELO 2.png` es la imagen inicial.
 - **Galería:** subir fotos o videos desde computadora o celular. Cada archivo queda privado como borrador hasta marcar la autorización para publicarlo.
 - La portada también muestra los modelos de moto disponibles en la carpeta del proyecto al final de **Hechos para rodar**.
-- **Citas y cotizaciones:** revisar las solicitudes y actualizar sus estados.
+- **Citas:** consultar el calendario administrativo por día, semana o mes, ver el nombre y la hora de cada cliente, y gestionar los estados.
+- **Cotizaciones:** revisar en su propia sección el nombre, celular, moto y trabajo solicitado, sin afectar la disponibilidad de citas.
 
 La galería acepta JPG, PNG, WebP, MP4 y WebM de hasta 100 MB por archivo. La base de datos conserva las imágenes antiguas de `galeria_forrados`; si una fila existente tiene `imagen_url`, el sitio la muestra como contenido publicado sin obligarte a volver a cargar el archivo.
 
@@ -59,7 +60,8 @@ La galería acepta JPG, PNG, WebP, MP4 y WebM de hasta 100 MB por archivo. La ba
 
 1. Ejecuta `npm run build`. Vite crea el sitio listo para producción en `dist`.
 2. Publica el proyecto en un hosting estático como Vercel o Netlify.
-3. Añade en el hosting las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`, y despliega otra vez.
+3. En **Vercel → Settings → Environment Variables**, agrega `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` para los entornos que uses (Production, Preview y Development), y vuelve a desplegar. El archivo `.env.local` de tu computador no se publica con el sitio.
 4. En **Supabase → Authentication → URL Configuration**, configura la dirección pública del sitio como URL de redirección permitida.
 
 `base_datos.sql` también carga horarios de ejemplo y servicios iniciales. Después de ejecutarlo, revisa y ajusta estos datos para que coincidan con el horario y los servicios reales del taller.
+Si el sitio muestra que faltan variables de Supabase, revisa que ambas estén configuradas en Vercel y vuelve a desplegar después de guardarlas.

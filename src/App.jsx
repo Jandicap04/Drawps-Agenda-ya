@@ -41,6 +41,17 @@ function fechaLocal(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
 
+function fechaDesdeLocal(fecha) {
+  const [anio, mes, dia] = fecha.split("-").map(Number);
+  return new Date(anio, mes - 1, dia);
+}
+
+function sumarDias(date, cantidad) {
+  const resultado = new Date(date);
+  resultado.setDate(resultado.getDate() + cantidad);
+  return resultado;
+}
+
 function textoFecha(fecha, opciones = { day: "numeric", month: "long", year: "numeric" }) {
   if (!fecha) return "Selecciona una fecha";
   return new Date(`${fecha}T12:00:00`).toLocaleDateString("es", opciones);
@@ -103,6 +114,130 @@ function TablaVacia({ texto }) {
   return <div className="empty-state">{texto}</div>;
 }
 
+function AgendaAdmin({ citas, fecha, modo, alCambiarFecha, alCambiarModo }) {
+  const fechaActual = fechaDesdeLocal(fecha);
+  const primerDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1);
+  const inicioSemana = sumarDias(fechaActual, -((fechaActual.getDay() + 6) % 7));
+  let diasVisibles;
+
+  if (modo === "dia") {
+    diasVisibles = [fechaActual];
+  } else if (modo === "semana") {
+    diasVisibles = Array.from({ length: 7 }, (_, indice) => sumarDias(inicioSemana, indice));
+  } else {
+    const desplazamiento = (primerDiaMes.getDay() + 6) % 7;
+    const cantidadDias = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + 1, 0).getDate();
+    const cantidadCeldas = Math.ceil((desplazamiento + cantidadDias) / 7) * 7;
+    const inicioCalendario = sumarDias(primerDiaMes, -desplazamiento);
+    diasVisibles = Array.from({ length: cantidadCeldas }, (_, indice) => sumarDias(inicioCalendario, indice));
+  }
+
+  const citasPorFecha = new Map();
+  citas.forEach((cita) => {
+    const delDia = citasPorFecha.get(cita.fecha) || [];
+    delDia.push(cita);
+    citasPorFecha.set(cita.fecha, delDia);
+  });
+  citasPorFecha.forEach((delDia) => delDia.sort((a, b) => a.hora.localeCompare(b.hora)));
+
+  const titulo = modo === "dia"
+    ? textoFecha(fecha, { weekday: "long", day: "numeric", month: "long", year: "numeric" })
+    : modo === "semana"
+      ? `${textoFecha(fechaLocal(inicioSemana), { day: "numeric", month: "short" })} – ${textoFecha(fechaLocal(sumarDias(inicioSemana, 6)), { day: "numeric", month: "short", year: "numeric" })}`
+      : textoFecha(fecha, { month: "long", year: "numeric" });
+  const tituloCapitalizado = titulo.charAt(0).toLocaleUpperCase("es") + titulo.slice(1);
+  const cambiarPeriodo = (cantidad) => {
+    if (modo === "dia") {
+      alCambiarFecha(fechaLocal(sumarDias(fechaActual, cantidad)));
+      return;
+    }
+    if (modo === "semana") {
+      alCambiarFecha(fechaLocal(sumarDias(fechaActual, cantidad * 7)));
+      return;
+    }
+    const siguienteMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth() + cantidad, 1);
+    const ultimoDia = new Date(siguienteMes.getFullYear(), siguienteMes.getMonth() + 1, 0).getDate();
+    alCambiarFecha(fechaLocal(new Date(siguienteMes.getFullYear(), siguienteMes.getMonth(), Math.min(fechaActual.getDate(), ultimoDia))));
+  };
+
+  return (
+    <div className="admin-agenda">
+      <div className="agenda-toolbar">
+        <div className="agenda-navigation">
+          <button className="icon-button" type="button" aria-label="Periodo anterior" onClick={() => cambiarPeriodo(-1)}>←</button>
+          <button className="table-action agenda-today" type="button" onClick={() => alCambiarFecha(fechaLocal(new Date()))}>Hoy</button>
+          <button className="icon-button" type="button" aria-label="Periodo siguiente" onClick={() => cambiarPeriodo(1)}>→</button>
+          <h3>{tituloCapitalizado}</h3>
+        </div>
+        <div className="agenda-modes" aria-label="Vista del calendario">
+          {[["dia", "Día"], ["semana", "Semana"], ["mes", "Mes"]].map(([valor, etiqueta]) => (
+            <button
+              className={`agenda-mode ${modo === valor ? "active" : ""}`}
+              type="button"
+              key={valor}
+              aria-pressed={modo === valor}
+              onClick={() => alCambiarModo(valor)}
+            >{etiqueta}</button>
+          ))}
+        </div>
+      </div>
+      {modo === "mes" ? (
+        <div className="admin-month-grid">
+          {semana.map((dia) => <span className="admin-calendar-weekday" key={dia.nombre}>{dia.nombre}</span>)}
+          {diasVisibles.map((dia) => {
+            const clave = fechaLocal(dia);
+            const citasDelDia = citasPorFecha.get(clave) || [];
+            return (
+              <button
+                className={`admin-month-day ${dia.getMonth() !== fechaActual.getMonth() ? "outside" : ""} ${clave === fecha ? "selected" : ""}`}
+                type="button"
+                key={clave}
+                onClick={() => { alCambiarFecha(clave); alCambiarModo("dia"); }}
+              >
+                <span className="admin-day-number">{dia.getDate()}</span>
+                <span className="admin-day-events">
+                  {citasDelDia.slice(0, 3).map((cita) => (
+                    <span className={`admin-calendar-event ${cita.estado}`} key={cita.id}>
+                      <strong>{cita.hora}</strong> {cita.nombre_cliente}
+                    </span>
+                  ))}
+                  {citasDelDia.length > 3 ? <span className="admin-more-events">+{citasDelDia.length - 3} más</span> : null}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+      ) : (
+        <div className={`admin-agenda-days ${modo === "dia" ? "single-day" : ""}`}>
+          {diasVisibles.map((dia) => {
+            const clave = fechaLocal(dia);
+            const citasDelDia = citasPorFecha.get(clave) || [];
+            return (
+              <section className={`admin-agenda-day ${clave === fecha ? "current" : ""}`} key={clave}>
+                <button className="admin-agenda-date" type="button" onClick={() => { alCambiarFecha(clave); alCambiarModo("dia"); }}>
+                  <span>{dia.toLocaleDateString("es", { weekday: "short" })}</span>
+                  <strong>{dia.getDate()}</strong>
+                  <span>{dia.toLocaleDateString("es", { month: "short" })}</span>
+                </button>
+                <div className="admin-agenda-events">
+                  {citasDelDia.map((cita) => (
+                    <article className={`admin-agenda-event ${cita.estado}`} key={cita.id}>
+                      <strong>{cita.hora} · {cita.nombre_cliente}</strong>
+                      <span>{cita.nombre_servicio} · {cita.motocicleta}</span>
+                      {cita.telefono_cliente ? <span>{cita.telefono_cliente}</span> : null}
+                    </article>
+                  ))}
+                  {!citasDelDia.length ? <span className="admin-no-events">Sin citas</span> : null}
+                </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function App() {
   const [vista, setVista] = useState("inicio");
   const [servicios, setServicios] = useState(serviciosDeMuestra);
@@ -122,6 +257,8 @@ export default function App() {
   const [pestanaAdmin, setPestanaAdmin] = useState("resumen");
   const [resumenAdmin, setResumenAdmin] = useState(null);
   const [citasAdmin, setCitasAdmin] = useState([]);
+  const [fechaAgendaAdmin, setFechaAgendaAdmin] = useState(() => fechaLocal(new Date()));
+  const [vistaAgendaAdmin, setVistaAgendaAdmin] = useState("mes");
   const [valoracionesAdmin, setValoracionesAdmin] = useState([]);
   const [galeria, setGaleria] = useState([]);
   const [galeriaAdmin, setGaleriaAdmin] = useState([]);
@@ -180,7 +317,7 @@ export default function App() {
       } catch (error) {
         if (!vigente) return;
         setApiConectada(false);
-        setMensajeApi(`Supabase aún no está listo: ${error.message}. Revisa .env.local y ejecuta base_datos.sql en Supabase.`);
+        setMensajeApi(`Supabase aún no está listo: ${error.message}. Configura VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel (o en .env.local para desarrollo) y confirma que base_datos.sql esté aplicado en Supabase.`);
       }
     }
     iniciar();
@@ -590,23 +727,23 @@ export default function App() {
     }
   }
 
-  const contenidoCalendario = (compacto) => (
-    <section className={compacto ? "quick-calendar" : "form-card calendar-card"}>
+  const contenidoCalendario = () => (
+    <section className="form-card calendar-card">
       <p className="eyebrow"><span className="status-dot" /> AGENDA TU CITA</p>
-      <h2>{compacto ? "Elige la fecha y hora" : "Selecciona fecha y hora"}</h2>
-      <p>{compacto ? "Selecciona el día que más te convenga y asegura tu espacio." : "Las horas ocupadas no aparecerán disponibles."}</p>
-      <label className="quick-service-select">
+      <h2>Selecciona fecha y hora</h2>
+      <p>Las horas ocupadas no aparecerán disponibles.</p>
+      <label className="calendar-service-select">
         Servicio
         <select value={servicioId} onChange={(event) => cambiarServicio(event.target.value)} aria-label="Servicio para consultar horarios">
           {servicios.filter((servicio) => servicio.activo !== false).map((servicio) =>
             <option key={servicio.id} value={servicio.id}>{servicio.nombre} · {duracionTexto(servicio.duracion_minutos)}</option>)}
         </select>
       </label>
-      <div className="quick-calendar-layout">
-        <div className="quick-month">
+      <div className="availability-layout">
+        <div className="availability-month">
           <Calendario mes={mes} fechaSeleccionada={fecha} alCambiarMes={cambiarMes} alElegirFecha={(nuevaFecha) => { setFecha(nuevaFecha); setHora(""); }} />
         </div>
-        <div className="quick-time-list">
+        <div className="availability-time-list">
           <strong>{fecha ? textoFecha(fecha, { day: "numeric", month: "short" }) : "Horarios disponibles"}</strong>
           {cargandoHorarios ? <span className="empty-slots">Buscando horarios…</span> : null}
           {!cargandoHorarios && errorHorarios ? <span className="empty-slots">{errorHorarios}</span> : null}
@@ -620,11 +757,6 @@ export default function App() {
           )}
         </div>
       </div>
-      {compacto ? (
-        <button className="button button-primary button-full" type="button" disabled={!apiConectada} onClick={() => { if (fecha && hora) irAVista("reservar"); else mostrarAviso("Elige una fecha y una hora para continuar."); }}>
-          ▣ &nbsp; Confirmar cita <span aria-hidden="true">→</span>
-        </button>
-      ) : null}
     </section>
   );
 
@@ -695,7 +827,12 @@ export default function App() {
               <button className="button button-primary button-full" type="submit">◇ &nbsp; Solicitar cotización <span aria-hidden="true">→</span></button>
               <span className="quick-footnote">ⓘ &nbsp; Nos pondremos en contacto contigo para conocer los detalles.</span>
             </form>
-            {contenidoCalendario(true)}
+            <aside className="quick-booking">
+              <p className="eyebrow"><span className="status-dot" /> AGENDA TU CITA</p>
+              <h2>¿Ya sabes cuándo venir?</h2>
+              <p>Consulta los horarios disponibles y reserva tu espacio. La cotización no reserva ni bloquea una hora.</p>
+              <button className="button button-primary" type="button" onClick={() => irAVista("reservar")}>Ver horarios disponibles <span aria-hidden="true">→</span></button>
+            </aside>
           </section>
 
           <section className="intro-section section-wrap">
@@ -739,7 +876,7 @@ export default function App() {
                 <div className="step-heading"><span className="step-number">01</span><div><h2>Elige tu servicio</h2><p>Selecciona el tipo de trabajo que quieres realizar.</p></div></div>
                 <div className="service-options">{servicios.map((servicio) => <button type="button" key={servicio.id} className={`service-option ${servicio.id === servicioId ? "selected" : ""}`} onClick={() => cambiarServicio(servicio.id)}><strong>{servicio.nombre}</strong><span>{servicio.descripcion}</span><span className="option-meta">{duracionTexto(servicio.duracion_minutos)} · {precioTexto(servicio.precio_desde)}</span></button>)}</div>
               </section>
-              {contenidoCalendario(false)}
+              {contenidoCalendario()}
               <form className="form-card booking-form" onSubmit={enviarReserva}>
                 <div className="step-heading"><span className="step-number">03</span><div><h2>Tus datos</h2><p>Ingresa con tu celular para crear una cita.</p></div></div>
                 {usuario?.rol === "cliente" ? <p className="signed-in-note">Sesión: {usuario.nombre} · {usuario.telefono}</p> : <p className="signed-in-note">Para reservar necesitarás una cuenta de cliente. <button type="button" className="inline-button" onClick={() => { setTipoAcceso("ingreso"); irAVista("cuenta"); }}>Ingresar o crear cuenta</button></p>}
@@ -763,7 +900,7 @@ export default function App() {
 
       {vista === "cotizar" ? (
         <main className="section-wrap inner-view">
-          <div className="page-heading"><p className="eyebrow eyebrow-dark">CUÉNTANOS TU IDEA</p><h1>Hagamos una <span>valoración.</span></h1><p>Comparte los detalles de tu moto y del trabajo que tienes en mente. Te contactaremos para asesorarte.</p></div>
+          <div className="page-heading"><p className="eyebrow eyebrow-dark">CUÉNTANOS TU IDEA</p><h1>Solicita una <span>cotización.</span></h1><p>Comparte los datos de contacto y los detalles de tu moto y del trabajo que tienes en mente. Te contactaremos para asesorarte; esta solicitud no reserva una hora.</p></div>
           <form className="quote-form form-card" onSubmit={enviarValoracion}>
             <div className="form-grid">
               <label>Nombre completo<input name="nombre" autoComplete="name" placeholder="¿Cómo te llamas?" required minLength="2" /></label>
@@ -817,20 +954,39 @@ export default function App() {
           <div className="admin-top"><div><p className="eyebrow">PANEL DE ADMINISTRACIÓN</p><h1>Hola, <span>{usuario?.nombre || "administrador"}.</span></h1><p>Revisa las citas y solicitudes de tu taller.</p></div><button className="button button-quiet admin-logout" onClick={cerrarSesion}>Cerrar sesión</button></div>
           <div className="admin-content">
             <div className="admin-tabs">
-              {["resumen", "citas", "valoraciones", "galeria", "servicios", "diseno"].map((tab) => <button key={tab} className={`admin-tab ${pestanaAdmin === tab ? "active" : ""}`} onClick={() => setPestanaAdmin(tab)}>{tab === "resumen" ? "Resumen" : tab === "citas" ? <>Citas <span className="tab-count">{citasAdmin.length}</span></> : tab === "valoraciones" ? <>Valoraciones <span className="tab-count">{valoracionesAdmin.length}</span></> : tab === "galeria" ? <>Galería <span className="tab-count">{galeriaAdmin.length}</span></> : tab === "servicios" ? "Servicios y precios" : "Diseño de página"}</button>)}
+              {["resumen", "citas", "valoraciones", "galeria", "servicios", "diseno"].map((tab) => <button key={tab} className={`admin-tab ${pestanaAdmin === tab ? "active" : ""}`} onClick={() => setPestanaAdmin(tab)}>{tab === "resumen" ? "Resumen" : tab === "citas" ? <>Citas <span className="tab-count">{citasAdmin.length}</span></> : tab === "valoraciones" ? <>Cotizaciones <span className="tab-count">{valoracionesAdmin.length}</span></> : tab === "galeria" ? <>Galería <span className="tab-count">{galeriaAdmin.length}</span></> : tab === "servicios" ? "Servicios y precios" : "Diseño de página"}</button>)}
             </div>
             {cargandoAdmin ? <TablaVacia texto="Cargando datos del taller…" /> : null}
             {!cargandoAdmin && pestanaAdmin === "resumen" ? <>
               <div className="stats-grid">
                 <article className="stat-card"><span>Citas pendientes</span><strong>{resumenAdmin?.citas_pendientes ?? 0}</strong><small>Por confirmar</small></article>
                 <article className="stat-card"><span>Próximas citas</span><strong>{resumenAdmin?.citas_proximas ?? 0}</strong><small>En tu agenda</small></article>
-                <article className="stat-card"><span>Valoraciones nuevas</span><strong>{resumenAdmin?.valoraciones_nuevas ?? 0}</strong><small>Por revisar</small></article>
+                <article className="stat-card"><span>Cotizaciones nuevas</span><strong>{resumenAdmin?.valoraciones_nuevas ?? 0}</strong><small>Por revisar</small></article>
                 <article className="stat-card"><span>Servicios activos</span><strong>{resumenAdmin?.servicios_activos ?? 0}</strong><small>En tu catálogo</small></article>
               </div>
               <div className="admin-card"><div className="admin-card-head"><div><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Próximas citas</h2></div><button className="inline-button" onClick={() => setPestanaAdmin("citas")}>Ver todas →</button></div><TablaCitas citas={citasAdmin.filter((cita) => ["pendiente", "confirmada"].includes(cita.estado)).slice(0, 5)} alCambiar={actualizarEstadoCita} /></div>
             </> : null}
-            {!cargandoAdmin && pestanaAdmin === "citas" ? <div className="admin-card"><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Todas las citas</h2><TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} /></div> : null}
-            {!cargandoAdmin && pestanaAdmin === "valoraciones" ? <div className="admin-card"><p className="eyebrow eyebrow-dark">PROYECTOS POR REVISAR</p><h2>Solicitudes de valoración</h2><TablaValoraciones valoraciones={valoracionesAdmin} alCambiar={actualizarEstadoValoracion} /></div> : null}
+            {!cargandoAdmin && pestanaAdmin === "citas" ? (
+              <>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">AGENDA DEL TALLER</p>
+                  <h2>Calendario de citas</h2>
+                  <AgendaAdmin
+                    citas={citasAdmin}
+                    fecha={fechaAgendaAdmin}
+                    modo={vistaAgendaAdmin}
+                    alCambiarFecha={setFechaAgendaAdmin}
+                    alCambiarModo={setVistaAgendaAdmin}
+                  />
+                </section>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">GESTIÓN</p>
+                  <h2>Detalle y estado de las citas</h2>
+                  <TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} />
+                </section>
+              </>
+            ) : null}
+            {!cargandoAdmin && pestanaAdmin === "valoraciones" ? <div className="admin-card"><p className="eyebrow eyebrow-dark">PROYECTOS POR REVISAR</p><h2>Solicitudes de cotización</h2><TablaValoraciones valoraciones={valoracionesAdmin} alCambiar={actualizarEstadoValoracion} /></div> : null}
             {!cargandoAdmin && pestanaAdmin === "galeria" ? (
               <>
                 <section className="admin-card">
@@ -930,7 +1086,7 @@ function TablaCitas({ citas, alCambiar }) {
 }
 
 function TablaValoraciones({ valoraciones, alCambiar }) {
-  if (!valoraciones.length) return <TablaVacia texto="Aún no hay solicitudes de valoración." />;
+  if (!valoraciones.length) return <TablaVacia texto="Aún no hay solicitudes de cotización." />;
   return <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Cliente / moto</th><th>Proyecto</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
     {valoraciones.map((item) => <tr key={item.id}><td><strong>{item.nombre_cliente}</strong><br />{item.telefono_cliente}<br />{item.motocicleta}</td><td>{item.nombre_servicio}<br /><span>{item.detalle}</span></td><td><span className={`status-pill ${item.estado}`}>{item.estado}</span></td><td><div className="table-actions">{item.estado === "nueva" ? <><button className="table-action" onClick={() => alCambiar(item.id, "contactada")}>Marcar contactada</button><button className="table-action" onClick={() => alCambiar(item.id, "rechazada")}>Cerrar</button></> : null}{item.estado === "contactada" ? <button className="table-action" onClick={() => alCambiar(item.id, "cerrada")}>Cerrar solicitud</button> : null}</div></td></tr>)}
   </tbody></table></div>;
