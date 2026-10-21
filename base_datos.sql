@@ -704,6 +704,22 @@ GRANT INSERT ON public.solicitudes_valoracion TO anon, authenticated;
 GRANT INSERT, DELETE ON public.galeria_forrados TO authenticated;
 GRANT UPDATE (nombre, telefono) ON public.perfiles TO authenticated;
 
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime')
+       AND NOT EXISTS (
+           SELECT 1
+           FROM pg_publication_tables
+           WHERE pubname = 'supabase_realtime'
+             AND schemaname = 'public'
+             AND tablename = 'citas'
+       )
+    THEN
+        ALTER PUBLICATION supabase_realtime ADD TABLE public.citas;
+    END IF;
+END
+$$;
+
 INSERT INTO public.horarios_atencion (dia_semana, hora_apertura, hora_cierre, activo) VALUES
     (1, '09:00', '18:00', TRUE),
     (2, '09:00', '18:00', TRUE),

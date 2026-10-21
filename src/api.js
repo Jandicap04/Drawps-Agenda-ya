@@ -297,6 +297,17 @@ export const api = {
     }));
   },
 
+  observarCambiosCitas(callback, alError) {
+    return exigirSupabase()
+      .channel(`admin-citas-${crypto.randomUUID()}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "citas" }, callback)
+      .subscribe((estado, error) => {
+        if (estado === "CHANNEL_ERROR" || estado === "TIMED_OUT") {
+          alError(error || new Error("No se pudo activar la actualización automática de citas."));
+        }
+      });
+  },
+
   async valoracionesAdmin() {
     const { data, error } = await exigirSupabase()
       .from("solicitudes_valoracion")

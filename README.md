@@ -43,7 +43,7 @@ Las personas no necesitan crear una cuenta para usar el sitio. Al reservar, elig
 3. En **WhatsApp del taller**, escribe el código de país y el número, solo con dígitos. Para Colombia, escribe `57` seguido del número celular, por ejemplo `573001234567`.
 4. Pulsa **Guardar diseño y WhatsApp**. El número inicial ya queda configurado como `573214066140`; puedes cambiarlo desde este mismo campo si el taller usa otro.
 
-Las cotizaciones piden los datos de contacto y del proyecto, abren WhatsApp con esa información y quedan en **Administración → Cotizaciones**. No reservan ni bloquean fecha u hora. Solo una cita creada desde **Agenda** ocupa un horario; la persona debe elegir una hora disponible e ingresar con su cuenta de cliente.
+Las cotizaciones piden los datos de contacto y del proyecto, abren WhatsApp con esa información y quedan en **Administración → Cotizaciones**. No reservan ni bloquean fecha u hora. Solo una cita creada desde **Agenda** ocupa un horario; no se necesita una cuenta de cliente.
 
 ## Lo que se puede administrar
 
@@ -51,7 +51,7 @@ Las cotizaciones piden los datos de contacto y del proyecto, abren WhatsApp con 
 - **Diseño de página:** cambiar los colores, subir una imagen de portada y configurar el WhatsApp del taller. `MODELO 2.png` es la imagen inicial.
 - **Galería:** subir fotos o videos desde computadora o celular. Cada archivo queda privado como borrador hasta marcar la autorización para publicarlo.
 - La portada también muestra los modelos de moto disponibles en la carpeta del proyecto al final de **Hechos para rodar**.
-- **Citas:** consultar el calendario administrativo por día, semana o mes, ver el nombre y la hora de cada cliente, y gestionar los estados.
+- **Citas:** las solicitudes guardadas aparecen en el calendario administrativo por día, semana o mes con el nombre, horario y servicio. El calendario se actualiza automáticamente mientras el panel está abierto; al seleccionar una solicitud se muestran el celular, la moto, el servicio y el trabajo solicitado, sin depender del mensaje de WhatsApp.
 - Desde la tabla administrativa se puede cambiar la fecha y hora de una cita activa; el sistema valida el horario del taller y evita conflictos con otras reservas.
 - **Cotizaciones:** revisar en su propia sección el nombre, celular, moto y trabajo solicitado, sin afectar la disponibilidad de citas.
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { api } from "./api.js";
 import { supabaseConfigurado } from "./supabase.js";
 import logo from "../LOGO1.jpg";
@@ -115,7 +115,35 @@ function TablaVacia({ texto }) {
   return <div className="empty-state">{texto}</div>;
 }
 
-function AgendaAdmin({ citas, fecha, modo, alCambiarFecha, alCambiarModo }) {
+function DetalleCita({ cita, alCerrar }) {
+  const dialogo = useRef(null);
+
+  useEffect(() => {
+    dialogo.current?.showModal();
+  }, []);
+
+  return (
+    <dialog className="modal appointment-details-modal" ref={dialogo} aria-labelledby="appointment-details-title" onClose={alCerrar}>
+      <div className="modal-head">
+        <div><p className="eyebrow eyebrow-dark">SOLICITUD DE CITA</p><h2 id="appointment-details-title">{cita.nombre_cliente}</h2></div>
+        <button className="icon-button" type="button" aria-label="Cerrar detalles" onClick={() => dialogo.current?.close()}>×</button>
+      </div>
+      <div className="appointment-detail-list">
+        <div><span>Fecha</span><strong>{textoFecha(cita.fecha, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}</strong></div>
+        <div><span>Hora</span><strong>{cita.hora}</strong></div>
+        <div><span>Servicio</span><strong>{cita.nombre_servicio}</strong></div>
+        <div><span>Duración estimada</span><strong>{duracionTexto(cita.duracion_minutos)}</strong></div>
+        <div><span>Celular</span><strong>{cita.telefono_cliente || "No registrado"}</strong></div>
+        <div><span>Moto</span><strong>{cita.motocicleta || "No registrada"}</strong></div>
+        <div><span>Estado</span><strong><span className={`status-pill ${cita.estado}`}>{cita.estado}</span></strong></div>
+        <div className="appointment-detail-notes"><span>Trabajo solicitado</span><p>{cita.notas || "Sin detalles adicionales."}</p></div>
+      </div>
+      <button className="button button-primary button-full" type="button" onClick={() => dialogo.current?.close()}>Cerrar</button>
+    </dialog>
+  );
+}
+
+function AgendaAdmin({ citas, fecha, modo, alCambiarFecha, alCambiarModo, alSeleccionarCita }) {
   const fechaActual = fechaDesdeLocal(fecha);
   const primerDiaMes = new Date(fechaActual.getFullYear(), fechaActual.getMonth(), 1);
   const inicioSemana = sumarDias(fechaActual, -((fechaActual.getDay() + 6) % 7));
@@ -189,22 +217,26 @@ function AgendaAdmin({ citas, fecha, modo, alCambiarFecha, alCambiarModo }) {
             const clave = fechaLocal(dia);
             const citasDelDia = citasPorFecha.get(clave) || [];
             return (
-              <button
+              <div
                 className={`admin-month-day ${dia.getMonth() !== fechaActual.getMonth() ? "outside" : ""} ${clave === fecha ? "selected" : ""}`}
-                type="button"
                 key={clave}
-                onClick={() => { alCambiarFecha(clave); alCambiarModo("dia"); }}
               >
-                <span className="admin-day-number">{dia.getDate()}</span>
+                <button className="admin-day-select" type="button" onClick={() => { alCambiarFecha(clave); alCambiarModo("dia"); }}>
+                  <span className="admin-day-number">{dia.getDate()}</span>
+                </button>
                 <span className="admin-day-events">
                   {citasDelDia.slice(0, 3).map((cita) => (
-                    <span className={`admin-calendar-event ${cita.estado}`} key={cita.id}>
-                      <strong>{cita.hora}</strong> {cita.nombre_cliente}
-                    </span>
+                    <button
+                      className={`admin-calendar-event ${cita.estado}`}
+                      type="button"
+                      key={cita.id}
+                      title={`${cita.hora} · ${cita.nombre_cliente} · ${cita.nombre_servicio}`}
+                      onClick={() => alSeleccionarCita(cita)}
+                    ><strong>{cita.hora}</strong> {cita.nombre_cliente} · {cita.nombre_servicio}</button>
                   ))}
                   {citasDelDia.length > 3 ? <span className="admin-more-events">+{citasDelDia.length - 3} más</span> : null}
                 </span>
-              </button>
+              </div>
             );
           })}
         </div>
@@ -222,11 +254,10 @@ function AgendaAdmin({ citas, fecha, modo, alCambiarFecha, alCambiarModo }) {
                 </button>
                 <div className="admin-agenda-events">
                   {citasDelDia.map((cita) => (
-                    <article className={`admin-agenda-event ${cita.estado}`} key={cita.id}>
+                    <button className={`admin-agenda-event ${cita.estado}`} type="button" key={cita.id} onClick={() => alSeleccionarCita(cita)}>
                       <strong>{cita.hora} · {cita.nombre_cliente}</strong>
-                      <span>{cita.nombre_servicio} · {cita.motocicleta}</span>
-                      {cita.telefono_cliente ? <span>{cita.telefono_cliente}</span> : null}
-                    </article>
+                      <span>{cita.nombre_servicio}</span>
+                    </button>
                   ))}
                   {!citasDelDia.length ? <span className="admin-no-events">Sin citas</span> : null}
                 </div>
@@ -256,6 +287,7 @@ export default function App() {
   const [pestanaAdmin, setPestanaAdmin] = useState("resumen");
   const [resumenAdmin, setResumenAdmin] = useState(null);
   const [citasAdmin, setCitasAdmin] = useState([]);
+  const [citaSeleccionada, setCitaSeleccionada] = useState(null);
   const [fechaAgendaAdmin, setFechaAgendaAdmin] = useState(() => fechaLocal(new Date()));
   const [vistaAgendaAdmin, setVistaAgendaAdmin] = useState("mes");
   const [valoracionesAdmin, setValoracionesAdmin] = useState([]);
@@ -357,6 +389,19 @@ export default function App() {
     if (vista !== "administracion" || usuario?.rol !== "administrador") return;
     let vigente = true;
     setCargandoAdmin(true);
+    const canalCitas = api.observarCambiosCitas(() => {
+      Promise.all([api.resumenAdmin(), api.citasAdmin()])
+        .then(([resumen, citas]) => {
+          if (!vigente) return;
+          setResumenAdmin(resumen);
+          setCitasAdmin(citas);
+        })
+        .catch((error) => {
+          if (vigente) mostrarAviso(`No se pudieron actualizar las citas: ${error.message}`);
+        });
+    }, (error) => {
+      if (vigente) mostrarAviso(error.message);
+    });
     Promise.allSettled([
       api.resumenAdmin(),
       api.citasAdmin(),
@@ -382,7 +427,10 @@ export default function App() {
         if (errores.length) mostrarAviso(`Algunas secciones necesitan actualizar Supabase: ${errores.join("; ")}`);
       })
       .finally(() => { if (vigente) setCargandoAdmin(false); });
-    return () => { vigente = false; };
+    return () => {
+      vigente = false;
+      canalCitas.unsubscribe();
+    };
   }, [vista, usuario]);
 
   useEffect(() => {
@@ -929,7 +977,7 @@ export default function App() {
                 <article className="stat-card"><span>Cotizaciones nuevas</span><strong>{resumenAdmin?.valoraciones_nuevas ?? 0}</strong><small>Por revisar</small></article>
                 <article className="stat-card"><span>Servicios activos</span><strong>{resumenAdmin?.servicios_activos ?? 0}</strong><small>En tu catálogo</small></article>
               </div>
-              <div className="admin-card"><div className="admin-card-head"><div><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Próximas citas</h2></div><button className="inline-button" onClick={() => setPestanaAdmin("citas")}>Ver todas →</button></div><TablaCitas citas={citasAdmin.filter((cita) => ["pendiente", "confirmada"].includes(cita.estado)).slice(0, 5)} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} /></div>
+              <div className="admin-card"><div className="admin-card-head"><div><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Próximas citas</h2></div><button className="inline-button" onClick={() => setPestanaAdmin("citas")}>Ver todas →</button></div><TablaCitas citas={citasAdmin.filter((cita) => ["pendiente", "confirmada"].includes(cita.estado)).slice(0, 5)} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} alSeleccionar={setCitaSeleccionada} /></div>
             </> : null}
             {!cargandoAdmin && pestanaAdmin === "citas" ? (
               <>
@@ -942,12 +990,13 @@ export default function App() {
                     modo={vistaAgendaAdmin}
                     alCambiarFecha={setFechaAgendaAdmin}
                     alCambiarModo={setVistaAgendaAdmin}
+                    alSeleccionarCita={setCitaSeleccionada}
                   />
                 </section>
                 <section className="admin-card">
                   <p className="eyebrow eyebrow-dark">GESTIÓN</p>
                   <h2>Detalle y estado de las citas</h2>
-                  <TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} />
+                  <TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} alSeleccionar={setCitaSeleccionada} />
                 </section>
               </>
             ) : null}
@@ -1038,12 +1087,13 @@ export default function App() {
       {enlaceWhatsApp(configuracion.whatsapp_numero)
         ? <a className="whatsapp-floating" href={enlaceWhatsApp(configuracion.whatsapp_numero)} target="_blank" rel="noreferrer" aria-label="Escríbenos por WhatsApp">WhatsApp <span aria-hidden="true">↗</span></a>
         : null}
+      {citaSeleccionada ? <DetalleCita cita={citaSeleccionada} alCerrar={() => setCitaSeleccionada(null)} /> : null}
       {aviso ? <div className="toast show" role="status">{aviso}</div> : null}
     </>
   );
 }
 
-function TablaCitas({ citas, alCambiar, alReprogramar }) {
+function TablaCitas({ citas, alCambiar, alReprogramar, alSeleccionar }) {
   const [citaEditando, setCitaEditando] = useState("");
   const [fechaEditada, setFechaEditada] = useState("");
   const [horaEditada, setHoraEditada] = useState("");
@@ -1084,6 +1134,7 @@ function TablaCitas({ citas, alCambiar, alReprogramar }) {
               </>
             ) : (
               <>
+                <button className="table-action" type="button" onClick={() => alSeleccionar(cita)}>Ver solicitud</button>
                 {["pendiente", "confirmada"].includes(cita.estado) ? <button className="table-action" type="button" onClick={() => { setCitaEditando(cita.id); setFechaEditada(cita.fecha); setHoraEditada(cita.hora); }}>Cambiar fecha/hora</button> : null}
                 {cita.estado === "pendiente" ? <button className="table-action" type="button" onClick={() => alCambiar(cita.id, "confirmada")}>Confirmar</button> : null}
                 {["pendiente", "confirmada"].includes(cita.estado) ? <button className="table-action" type="button" onClick={() => alCambiar(cita.id, "cancelada")}>Cancelar</button> : null}
