@@ -330,6 +330,10 @@ textarea { resize: vertical; }
 .color-input-row { display: flex; align-items: center; gap: 10px; color: #777e78; font-weight: 400; }
 .color-input-row input[type="color"] { width: 54px; height: 42px; padding: 4px; cursor: pointer; }
 .design-colors-form > button { grid-column: 1 / -1; justify-self: start; }
+.whatsapp-number-field { grid-column: 1 / -1; max-width: 520px; }
+.field-help { color: #818881; font-size: 9px; font-weight: 400; line-height: 1.5; }
+.whatsapp-floating { position: fixed; right: 22px; bottom: 22px; z-index: 8; display: inline-flex; align-items: center; gap: 9px; min-height: 46px; padding: 0 18px; border-radius: 24px; background: #25d366; color: #102d1b; box-shadow: 0 5px 18px rgba(0,0,0,.2); font-size: 12px; font-weight: 700; text-decoration: none; }
+.whatsapp-floating:hover { background: #1fbd5a; transform: translateY(-1px); }
 
 @media (max-width: 850px) {
   .topbar { padding: 0 5%; }
@@ -434,11 +438,12 @@ textarea { resize: vertical; }
   .site-footer > span:nth-child(2) { display: none; }
   .footer-contact { grid-column: 1 / -1; }
   .service-edit-form, .design-colors-form { grid-template-columns: 1fr; }
-  .service-edit-form > label, .service-description-field, .service-form-actions, .design-colors-form > button { grid-column: 1; }
+  .service-edit-form > label, .service-description-field, .service-form-actions, .design-colors-form > button, .whatsapp-number-field { grid-column: 1; }
   .service-admin-item { grid-template-columns: minmax(0, 1fr) auto; gap: 9px; }
   .service-admin-item .service-admin-actions { grid-column: 1 / -1; }
   .service-admin-item .status-pill { grid-column: 2; grid-row: 1; }
   .design-preview { max-height: 290px; }
+  .whatsapp-floating { right: 14px; bottom: 14px; }
 }
 @media (max-width: 420px) {
   .gallery-grid { grid-template-columns: 1fr; }

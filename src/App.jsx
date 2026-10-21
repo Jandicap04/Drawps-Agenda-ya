@@ -7,8 +7,15 @@ const configuracionInicial = {
   color_primario: "#c9fa58",
   color_acento: "#a2d83b",
   color_fondo_oscuro: "#0d1317",
+  whatsapp_numero: "",
   imagen_portada_url: "",
 };
+
+function enlaceWhatsApp(numero) {
+  const numeroLimpio = String(numero || "").replace(/\D/g, "");
+  if (numeroLimpio.length < 8 || numeroLimpio.length > 15) return "";
+  return `https://wa.me/${numeroLimpio}?text=${encodeURIComponent("Hola, me interesa conocer los servicios de DWRAPS.")}`;
+}
 
 const serviciosDeMuestra = [
   { id: "forrado-completo", nombre: "Forrado completo", descripcion: "Un cambio total de color y personalidad para tu moto.", duracion_minutos: 240, precio_desde: null },
@@ -524,16 +531,22 @@ export default function App() {
     async function guardarDiseno(event) {
       event.preventDefault();
       const datos = new FormData(event.currentTarget);
+      const whatsappNumero = String(datos.get("whatsapp_numero") || "").replace(/\D/g, "");
+      if (whatsappNumero && (whatsappNumero.length < 8 || whatsappNumero.length > 15)) {
+        mostrarAviso("Ingresa el WhatsApp con código de país y entre 8 y 15 dígitos.");
+        return;
+      }
       const nuevoDiseno = {
         ...configuracion,
         color_primario: String(datos.get("color_primario")),
         color_acento: String(datos.get("color_acento")),
         color_fondo_oscuro: String(datos.get("color_fondo_oscuro")),
+        whatsapp_numero: whatsappNumero,
       };
       try {
         await api.guardarConfiguracionSitio(nuevoDiseno);
         setConfiguracion(nuevoDiseno);
-        mostrarAviso("Colores de la página guardados.");
+        mostrarAviso("Diseño y contacto de WhatsApp guardados.");
       } catch (error) {
         mostrarAviso(error.message);
       }
@@ -858,7 +871,11 @@ export default function App() {
                     <label>Color principal (botones y detalles)<span className="color-input-row"><input name="color_primario" type="color" value={configuracion.color_primario} onChange={(event) => setConfiguracion((actual) => ({ ...actual, color_primario: event.target.value }))} /><span>{configuracion.color_primario}</span></span></label>
                     <label>Color de acento (títulos y resaltados)<span className="color-input-row"><input name="color_acento" type="color" value={configuracion.color_acento} onChange={(event) => setConfiguracion((actual) => ({ ...actual, color_acento: event.target.value }))} /><span>{configuracion.color_acento}</span></span></label>
                     <label>Fondo oscuro (portada y panel)<span className="color-input-row"><input name="color_fondo_oscuro" type="color" value={configuracion.color_fondo_oscuro} onChange={(event) => setConfiguracion((actual) => ({ ...actual, color_fondo_oscuro: event.target.value }))} /><span>{configuracion.color_fondo_oscuro}</span></span></label>
-                    <button className="button button-primary" type="submit">Guardar colores →</button>
+                    <label className="whatsapp-number-field">WhatsApp del taller (código de país + número)
+                      <input name="whatsapp_numero" type="tel" inputMode="numeric" autoComplete="tel" placeholder="Ejemplo Colombia: 573001234567" value={configuracion.whatsapp_numero} onChange={(event) => setConfiguracion((actual) => ({ ...actual, whatsapp_numero: event.target.value }))} />
+                      <span className="field-help">Escribe solo dígitos, incluyendo el código de país. Ej.: 57 + número celular.</span>
+                    </label>
+                    <button className="button button-primary" type="submit">Guardar diseño y WhatsApp →</button>
                   </form>
                 </section>
               </>
@@ -870,10 +887,15 @@ export default function App() {
       <footer className="site-footer">
         <a className="brand footer-brand" href="#inicio" onClick={(event) => { event.preventDefault(); irAVista("inicio"); }}><img className="brand-logo" src={logo} alt="DWRAPS" /></a>
         <span>PPF · WRAP · DISEÑO Y CALCOMANÍAS · BOGOTÁ</span>
-        <a className="footer-contact" href="https://wa.me/573011335000" target="_blank" rel="noreferrer">WhatsApp: 301 133 5000</a>
+        {enlaceWhatsApp(configuracion.whatsapp_numero)
+          ? <a className="footer-contact" href={enlaceWhatsApp(configuracion.whatsapp_numero)} target="_blank" rel="noreferrer">Escríbenos por WhatsApp</a>
+          : null}
         <button className="footer-admin" onClick={() => irAVista("ingreso-admin")}>Acceso administrador</button>
         <span className="copyright">Carrera 25B #41-35 sur, Bogotá · © {new Date().getFullYear()} DWRAPS.</span>
       </footer>
+      {enlaceWhatsApp(configuracion.whatsapp_numero)
+        ? <a className="whatsapp-floating" href={enlaceWhatsApp(configuracion.whatsapp_numero)} target="_blank" rel="noreferrer" aria-label="Escríbenos por WhatsApp">WhatsApp <span aria-hidden="true">↗</span></a>
+        : null}
       {aviso ? <div className="toast show" role="status">{aviso}</div> : null}
     </>
   );

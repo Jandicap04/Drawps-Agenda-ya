@@ -36,10 +36,19 @@ El SQL se puede ejecutar de nuevo si necesitas aplicar una actualización: no el
 
 Las cuentas de clientes usan celular y clave. Para registrar y verificar clientes, habilita un proveedor SMS en **Supabase → Authentication**.
 
+## Configurar WhatsApp del taller
+
+1. Ingresa al sitio con la cuenta administradora.
+2. Abre **Administración → Diseño de página**.
+3. En **WhatsApp del taller**, escribe el código de país y el número, solo con dígitos. Para Colombia, escribe `57` seguido del número celular, por ejemplo `573001234567`.
+4. Pulsa **Guardar diseño y WhatsApp**.
+
+El enlace de WhatsApp aparecerá en el pie de página y como botón flotante. Si el número está vacío, los enlaces no se muestran.
+
 ## Lo que se puede administrar
 
 - **Servicios y precios:** crear servicios, editar precios, descripción y duración, o esconder servicios sin borrar su historial.
-- **Diseño de página:** cambiar los colores y subir una imagen de portada. `MODELO 2.png` es la imagen inicial.
+- **Diseño de página:** cambiar los colores, subir una imagen de portada y configurar el WhatsApp del taller. `MODELO 2.png` es la imagen inicial.
 - **Galería:** subir fotos o videos desde computadora o celular. Cada archivo queda privado como borrador hasta marcar la autorización para publicarlo.
 - **Citas y cotizaciones:** revisar las solicitudes y actualizar sus estados.
 

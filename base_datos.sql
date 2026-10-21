@@ -32,6 +32,7 @@ CREATE TABLE IF NOT EXISTS public.configuracion_sitio (
         CHECK (color_acento ~ '^#[0-9A-Fa-f]{6}$'),
     color_fondo_oscuro TEXT NOT NULL DEFAULT '#0d1317'
         CHECK (color_fondo_oscuro ~ '^#[0-9A-Fa-f]{6}$'),
+    whatsapp_numero TEXT NOT NULL DEFAULT '',
     imagen_portada_url TEXT NOT NULL DEFAULT '',
     creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizada_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -41,6 +42,7 @@ ALTER TABLE public.configuracion_sitio
     ADD COLUMN IF NOT EXISTS color_primario TEXT NOT NULL DEFAULT '#c9fa58',
     ADD COLUMN IF NOT EXISTS color_acento TEXT NOT NULL DEFAULT '#a2d83b',
     ADD COLUMN IF NOT EXISTS color_fondo_oscuro TEXT NOT NULL DEFAULT '#0d1317',
+    ADD COLUMN IF NOT EXISTS whatsapp_numero TEXT NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS imagen_portada_url TEXT NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS actualizada_en TIMESTAMPTZ NOT NULL DEFAULT NOW();

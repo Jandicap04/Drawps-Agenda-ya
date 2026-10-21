@@ -10,6 +10,7 @@ const CONFIGURACION_INICIAL = {
   color_primario: "#c9fa58",
   color_acento: "#a2d83b",
   color_fondo_oscuro: "#0d1317",
+  whatsapp_numero: "",
   imagen_portada_url: "",
 };
 
@@ -135,7 +136,7 @@ export const api = {
   async configuracionSitio() {
     const { data, error } = await exigirSupabase()
       .from("configuracion_sitio")
-      .select("color_primario, color_acento, color_fondo_oscuro, imagen_portada_url")
+      .select("color_primario, color_acento, color_fondo_oscuro, whatsapp_numero, imagen_portada_url")
       .eq("id", 1)
       .maybeSingle();
     comprobar(error);
