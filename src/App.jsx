@@ -1,21 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
 import logo from "../LOGO1.jpg";
+import imagenModeloUno from "../MODELO 1.png";
 import imagenModeloDos from "../MODELO 2.png";
+import imagenModeloTres from "../MODELO 3.png";
+import imagenModeloCuatro from "../MODELO 4.png";
 
 const configuracionInicial = {
   color_primario: "#c9fa58",
   color_acento: "#a2d83b",
   color_fondo_oscuro: "#0d1317",
-  whatsapp_numero: "",
+  whatsapp_numero: "573214066140",
   imagen_portada_url: "",
 };
 
-function enlaceWhatsApp(numero) {
+function enlaceWhatsApp(numero, mensaje = "Hola, me interesa conocer los servicios de DWRAPS.") {
   const numeroLimpio = String(numero || "").replace(/\D/g, "");
   if (numeroLimpio.length < 8 || numeroLimpio.length > 15) return "";
-  return `https://wa.me/${numeroLimpio}?text=${encodeURIComponent("Hola, me interesa conocer los servicios de DWRAPS.")}`;
+  return `https://wa.me/${numeroLimpio}?text=${encodeURIComponent(mensaje)}`;
 }
+
+const motosDeMuestra = [
+  { id: "modelo-1", titulo: "Diseño personalizado", tipo_mime: "image/png", url: imagenModeloUno },
+  { id: "modelo-3", titulo: "Estilo para rodar", tipo_mime: "image/png", url: imagenModeloTres },
+  { id: "modelo-4", titulo: "Detalles que destacan", tipo_mime: "image/png", url: imagenModeloCuatro },
+];
 
 const serviciosDeMuestra = [
   { id: "forrado-completo", nombre: "Forrado completo", descripcion: "Un cambio total de color y personalidad para tu moto.", duracion_minutos: 240, precio_desde: null },
@@ -348,19 +357,30 @@ export default function App() {
 
   async function enviarValoracion(event) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formulario = event.currentTarget;
+    const datos = new FormData(formulario);
+    const servicioSeleccionado = servicios.find((servicio) => servicio.id === String(datos.get("servicio_id") || ""));
+    const mensajeWhatsApp = [
+      "Hola, quiero cotizar un trabajo con DWRAPS.",
+      `Nombre: ${String(datos.get("nombre") || "").trim()}`,
+      `Celular: ${String(datos.get("telefono") || "").trim()}`,
+      `Moto: ${String(datos.get("motocicleta") || "").trim()}`,
+      `Servicio: ${servicioSeleccionado?.nombre || "Necesito orientación"}`,
+      `Idea: ${String(datos.get("detalle") || "").trim()}`,
+    ].join("\n");
+    window.open(enlaceWhatsApp(configuracion.whatsapp_numero, mensajeWhatsApp), "_blank", "noopener,noreferrer");
     try {
       await api.crearValoracion({
-        nombre: String(form.get("nombre") || "").trim(),
-        telefono: String(form.get("telefono") || "").trim(),
-        motocicleta: String(form.get("motocicleta") || "").trim(),
-        servicio_id: String(form.get("servicio_id") || ""),
-        detalle: String(form.get("detalle") || "").trim(),
+        nombre: String(datos.get("nombre") || "").trim(),
+        telefono: String(datos.get("telefono") || "").trim(),
+        motocicleta: String(datos.get("motocicleta") || "").trim(),
+        servicio_id: String(datos.get("servicio_id") || ""),
+        detalle: String(datos.get("detalle") || "").trim(),
       });
-      event.currentTarget.reset();
+      formulario.reset();
       setMotoCotizacion("");
       setIdeaCotizacion("");
-      mostrarAviso("Recibimos tu solicitud. Te contactaremos para conversar sobre el proyecto.");
+      mostrarAviso("Cotización enviada por WhatsApp y guardada para que el taller le dé seguimiento.");
       irAVista("inicio");
     } catch (error) {
       mostrarAviso(error.message);
@@ -479,93 +499,94 @@ export default function App() {
     } catch (error) {
       mostrarAviso(error.message);
     }
+  }
 
-    async function guardarServicio(event) {
-      event.preventDefault();
-      const form = event.currentTarget;
-      const datos = new FormData(form);
-      const precio = String(datos.get("precio_desde") || "").trim();
-      setGuardandoServicio(true);
-      try {
-        await api.guardarServicio({
-          ...(servicioEditando?.id ? { id: servicioEditando.id } : {}),
-          nombre: String(datos.get("nombre") || "").trim(),
-          descripcion: String(datos.get("descripcion") || "").trim(),
-          duracion_minutos: Number(datos.get("duracion_minutos")),
-          precio_desde: precio ? Number(precio) : null,
-          activo: servicioEditando?.activo ?? true,
-        });
-        setServiciosAdmin(await api.serviciosAdmin());
-        const catalogo = await api.servicios();
-        setServicios(catalogo);
-        if (!servicioId && catalogo.length) setServicioId(catalogo[0].id);
-        setServicioEditando(null);
-        form.reset();
-        mostrarAviso("Servicio guardado correctamente.");
-        if (vista === "administracion") setResumenAdmin(await api.resumenAdmin());
-      } catch (error) {
-        mostrarAviso(error.message);
-      } finally {
-        setGuardandoServicio(false);
-      }
+  async function guardarServicio(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const datos = new FormData(form);
+    const precio = String(datos.get("precio_desde") || "").trim();
+    setGuardandoServicio(true);
+    try {
+      await api.guardarServicio({
+        ...(servicioEditando?.id ? { id: servicioEditando.id } : {}),
+        nombre: String(datos.get("nombre") || "").trim(),
+        descripcion: String(datos.get("descripcion") || "").trim(),
+        duracion_minutos: Number(datos.get("duracion_minutos")),
+        precio_desde: precio ? Number(precio) : null,
+        activo: servicioEditando?.activo ?? true,
+      });
+      setServiciosAdmin(await api.serviciosAdmin());
+      const catalogo = await api.servicios();
+      setServicios(catalogo);
+      if (!servicioId && catalogo.length) setServicioId(catalogo[0].id);
+      setServicioEditando(null);
+      form.reset();
+      mostrarAviso("Servicio guardado correctamente.");
+      if (vista === "administracion") setResumenAdmin(await api.resumenAdmin());
+    } catch (error) {
+      mostrarAviso(error.message);
+    } finally {
+      setGuardandoServicio(false);
     }
+  }
 
-    async function cambiarEstadoServicio(servicio) {
-      try {
-        await api.guardarServicio({ ...servicio, activo: !servicio.activo });
-        const [administracion, catalogo] = await Promise.all([api.serviciosAdmin(), api.servicios()]);
-        setServiciosAdmin(administracion);
-        setServicios(catalogo);
-        if (!catalogo.some((item) => item.id === servicioId)) {
-          setServicioId(catalogo[0]?.id || "");
-          setFecha("");
-          setHora("");
-        }
-        setResumenAdmin(await api.resumenAdmin());
-        mostrarAviso(servicio.activo ? "Servicio ocultado del catálogo." : "Servicio activado en el catálogo.");
-      } catch (error) {
-        mostrarAviso(error.message);
+  async function cambiarEstadoServicio(servicio) {
+    try {
+      await api.guardarServicio({ ...servicio, activo: !servicio.activo });
+      const [administracion, catalogo] = await Promise.all([api.serviciosAdmin(), api.servicios()]);
+      setServiciosAdmin(administracion);
+      setServicios(catalogo);
+      if (!catalogo.some((item) => item.id === servicioId)) {
+        setServicioId(catalogo[0]?.id || "");
+        setFecha("");
+        setHora("");
       }
+      setResumenAdmin(await api.resumenAdmin());
+      mostrarAviso(servicio.activo ? "Servicio ocultado del catálogo." : "Servicio activado en el catálogo.");
+    } catch (error) {
+      mostrarAviso(error.message);
     }
+  }
 
-    async function guardarDiseno(event) {
-      event.preventDefault();
-      const datos = new FormData(event.currentTarget);
-      const whatsappNumero = String(datos.get("whatsapp_numero") || "").replace(/\D/g, "");
-      if (whatsappNumero && (whatsappNumero.length < 8 || whatsappNumero.length > 15)) {
-        mostrarAviso("Ingresa el WhatsApp con código de país y entre 8 y 15 dígitos.");
-        return;
-      }
-      const nuevoDiseno = {
-        ...configuracion,
-        color_primario: String(datos.get("color_primario")),
-        color_acento: String(datos.get("color_acento")),
-        color_fondo_oscuro: String(datos.get("color_fondo_oscuro")),
-        whatsapp_numero: whatsappNumero,
-      };
-      try {
-        await api.guardarConfiguracionSitio(nuevoDiseno);
-        setConfiguracion(nuevoDiseno);
-        mostrarAviso("Diseño y contacto de WhatsApp guardados.");
-      } catch (error) {
-        mostrarAviso(error.message);
-      }
+  async function guardarDiseno(event) {
+    event.preventDefault();
+    const datos = new FormData(event.currentTarget);
+    const whatsappNumero = String(datos.get("whatsapp_numero") || configuracion.whatsapp_numero).replace(/\D/g, "");
+    if (whatsappNumero && (whatsappNumero.length < 8 || whatsappNumero.length > 15)) {
+      mostrarAviso("Ingresa el WhatsApp con código de país y entre 8 y 15 dígitos.");
+      return;
     }
+    const nuevoDiseno = {
+      ...configuracion,
+      color_primario: String(datos.get("color_primario")),
+      color_acento: String(datos.get("color_acento")),
+      color_fondo_oscuro: String(datos.get("color_fondo_oscuro")),
+      whatsapp_numero: whatsappNumero,
+    };
+    try {
+      await api.guardarConfiguracionSitio(nuevoDiseno);
+      setConfiguracion(nuevoDiseno);
+      mostrarAviso("Diseño y contacto de WhatsApp guardados.");
+    } catch (error) {
+      mostrarAviso(error.message);
+    }
+  }
 
-    async function cambiarImagenPortada(event) {
-      const archivo = event.currentTarget.files?.[0];
-      if (!archivo) return;
-      setSubiendoPortada(true);
-      try {
-        const nuevoDiseno = await api.subirImagenPortada(archivo, configuracion);
-        setConfiguracion(nuevoDiseno);
-        mostrarAviso("Imagen principal actualizada.");
-      } catch (error) {
-        mostrarAviso(error.message);
-      } finally {
-        setSubiendoPortada(false);
-        event.currentTarget.value = "";
-      }
+  async function cambiarImagenPortada(event) {
+    const input = event.currentTarget;
+    const archivo = input.files?.[0];
+    if (!archivo) return;
+    setSubiendoPortada(true);
+    try {
+      const nuevoDiseno = await api.subirImagenPortada(archivo, configuracion);
+      setConfiguracion(nuevoDiseno);
+      mostrarAviso("Imagen principal actualizada.");
+    } catch (error) {
+      mostrarAviso(error.message);
+    } finally {
+      setSubiendoPortada(false);
+      input.value = "";
     }
   }
 
@@ -697,7 +718,7 @@ export default function App() {
 
           <section className="gallery-section section-wrap" id="galeria">
             <div className="section-heading"><div><p className="eyebrow eyebrow-dark">TRABAJOS REALES</p><h2>Hechos para <span>rodar.</span></h2></div><button className="text-button" onClick={() => irAVista("galeria")}>Ver galería →</button></div>
-            <Galeria trabajos={galeria.slice(0, 3)} />
+            <Galeria trabajos={[...galeria.slice(0, 3), ...motosDeMuestra]} />
           </section>
         </main>
       ) : null}
@@ -847,7 +868,7 @@ export default function App() {
                       <div><h3>{servicio.nombre}</h3><p>{servicio.descripcion || "Sin descripción"}</p><small>{duracionTexto(servicio.duracion_minutos)} · {precioTexto(servicio.precio_desde)}</small></div>
                       <span className={`status-pill ${servicio.activo ? "confirmada" : "cancelada"}`}>{servicio.activo ? "Visible" : "Oculto"}</span>
                       <div className="service-admin-actions">
-                        <button className="table-action" type="button" onClick={() => { setServicioEditando(servicio); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Editar</button>
+                        <button className="table-action" type="button" onClick={() => { setServicioEditando(servicio); window.setTimeout(() => document.querySelector(".service-edit-form")?.scrollIntoView({ behavior: "smooth", block: "center" }), 0); }}>Editar</button>
                         <button className="table-action" type="button" onClick={() => cambiarEstadoServicio(servicio)}>{servicio.activo ? "Ocultar" : "Activar"}</button>
                       </div>
                     </article>)}

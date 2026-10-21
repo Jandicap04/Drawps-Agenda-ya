@@ -32,7 +32,7 @@ CREATE TABLE IF NOT EXISTS public.configuracion_sitio (
         CHECK (color_acento ~ '^#[0-9A-Fa-f]{6}$'),
     color_fondo_oscuro TEXT NOT NULL DEFAULT '#0d1317'
         CHECK (color_fondo_oscuro ~ '^#[0-9A-Fa-f]{6}$'),
-    whatsapp_numero TEXT NOT NULL DEFAULT '',
+    whatsapp_numero TEXT NOT NULL DEFAULT '573214066140',
     imagen_portada_url TEXT NOT NULL DEFAULT '',
     creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     actualizada_en TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -42,10 +42,13 @@ ALTER TABLE public.configuracion_sitio
     ADD COLUMN IF NOT EXISTS color_primario TEXT NOT NULL DEFAULT '#c9fa58',
     ADD COLUMN IF NOT EXISTS color_acento TEXT NOT NULL DEFAULT '#a2d83b',
     ADD COLUMN IF NOT EXISTS color_fondo_oscuro TEXT NOT NULL DEFAULT '#0d1317',
-    ADD COLUMN IF NOT EXISTS whatsapp_numero TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS whatsapp_numero TEXT NOT NULL DEFAULT '573214066140',
     ADD COLUMN IF NOT EXISTS imagen_portada_url TEXT NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS creada_en TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     ADD COLUMN IF NOT EXISTS actualizada_en TIMESTAMPTZ NOT NULL DEFAULT NOW();
+
+ALTER TABLE public.configuracion_sitio
+    ALTER COLUMN whatsapp_numero SET DEFAULT '573214066140';
 
 -- ISO-8601: lunes = 1 y domingo = 7.
 CREATE TABLE IF NOT EXISTS public.horarios_atencion (
@@ -568,6 +571,10 @@ ON CONFLICT (nombre) DO NOTHING;
 
 INSERT INTO public.configuracion_sitio (id) VALUES (1)
 ON CONFLICT (id) DO NOTHING;
+
+UPDATE public.configuracion_sitio
+SET whatsapp_numero = '573214066140'
+WHERE id = 1 AND whatsapp_numero = '';
 
 -- Configurar almacenamiento privado y público para imágenes y videos.
 INSERT INTO storage.buckets (id, name, public, file_size_limit, allowed_mime_types) VALUES

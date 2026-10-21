@@ -10,7 +10,7 @@ const CONFIGURACION_INICIAL = {
   color_primario: "#c9fa58",
   color_acento: "#a2d83b",
   color_fondo_oscuro: "#0d1317",
-  whatsapp_numero: "",
+  whatsapp_numero: "573214066140",
   imagen_portada_url: "",
 };
 
@@ -140,7 +140,11 @@ export const api = {
       .eq("id", 1)
       .maybeSingle();
     comprobar(error);
-    return { ...CONFIGURACION_INICIAL, ...data };
+    return {
+      ...CONFIGURACION_INICIAL,
+      ...data,
+      whatsapp_numero: data?.whatsapp_numero || CONFIGURACION_INICIAL.whatsapp_numero,
+    };
   },
 
   async guardarConfiguracionSitio(configuracion) {

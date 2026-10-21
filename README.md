@@ -41,15 +41,16 @@ Las cuentas de clientes usan celular y clave. Para registrar y verificar cliente
 1. Ingresa al sitio con la cuenta administradora.
 2. Abre **Administración → Diseño de página**.
 3. En **WhatsApp del taller**, escribe el código de país y el número, solo con dígitos. Para Colombia, escribe `57` seguido del número celular, por ejemplo `573001234567`.
-4. Pulsa **Guardar diseño y WhatsApp**.
+4. Pulsa **Guardar diseño y WhatsApp**. El número inicial ya queda configurado como `573214066140`; puedes cambiarlo desde este mismo campo si el taller usa otro.
 
-El enlace de WhatsApp aparecerá en el pie de página y como botón flotante. Si el número está vacío, los enlaces no se muestran.
+Las cotizaciones abren WhatsApp con los datos del proyecto listos para enviar y también se guardan en el panel cuando Supabase está disponible. El enlace de WhatsApp aparece además en el pie de página y como botón flotante.
 
 ## Lo que se puede administrar
 
 - **Servicios y precios:** crear servicios, editar precios, descripción y duración, o esconder servicios sin borrar su historial.
 - **Diseño de página:** cambiar los colores, subir una imagen de portada y configurar el WhatsApp del taller. `MODELO 2.png` es la imagen inicial.
 - **Galería:** subir fotos o videos desde computadora o celular. Cada archivo queda privado como borrador hasta marcar la autorización para publicarlo.
+- La portada también muestra los modelos de moto disponibles en la carpeta del proyecto al final de **Hechos para rodar**.
 - **Citas y cotizaciones:** revisar las solicitudes y actualizar sus estados.
 
 La galería acepta JPG, PNG, WebP, MP4 y WebM de hasta 100 MB por archivo. La base de datos conserva las imágenes antiguas de `galeria_forrados`; si una fila existente tiene `imagen_url`, el sitio la muestra como contenido publicado sin obligarte a volver a cargar el archivo.
