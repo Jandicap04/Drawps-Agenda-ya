@@ -254,6 +254,21 @@ export const api = {
     return data;
   },
 
+  async solicitarCita({ nombre, telefono, servicio_id, fecha, hora, motocicleta, notas }) {
+    const { data, error } = await exigirSupabase().rpc("solicitar_cita", {
+      p_nombre_cliente: nombre,
+      p_telefono_cliente: telefono,
+      p_servicio_id: servicio_id,
+      p_fecha: fecha,
+      p_hora: hora,
+      p_motocicleta: motocicleta,
+      p_notas: notas,
+      p_zona_horaria: ZONA_HORARIA,
+    });
+    comprobar(error);
+    return data;
+  },
+
   async crearValoracion({ nombre, telefono, motocicleta, servicio_id, detalle }) {
     const cliente = exigirSupabase();
     const { data: { user } } = await cliente.auth.getUser();
@@ -292,32 +307,21 @@ export const api = {
   },
 
   async citasAdmin() {
-    const cliente = exigirSupabase();
-    const { data: citas, error } = await cliente
+    const { data, error } = await exigirSupabase()
       .from("citas")
-      .select("id, cliente_id, servicio_id, inicio, estado, notas, motocicleta")
+      .select("id, cliente_id, servicio_id, nombre_cliente, telefono_cliente, inicio, estado, notas, motocicleta")
       .order("inicio", { ascending: true })
       .limit(500);
     comprobar(error);
-
-    const perfilIds = [...new Set((citas || []).map((cita) => cita.cliente_id))];
-    const servicioIds = [...new Set((citas || []).map((cita) => cita.servicio_id))];
-    const [perfiles, servicios] = await Promise.all([
-      perfilIds.length
-        ? cliente.from("perfiles").select("id, nombre, telefono").in("id", perfilIds)
-        : Promise.resolve({ data: [], error: null }),
-      servicioIds.length
-        ? cliente.from("servicios").select("id, nombre, duracion_minutos").in("id", servicioIds)
-        : Promise.resolve({ data: [], error: null }),
-    ]);
-    comprobar(perfiles.error);
-    comprobar(servicios.error);
-
-    const perfilPorId = new Map((perfiles.data || []).map((perfil) => [perfil.id, perfil]));
-    const servicioPorId = new Map((servicios.data || []).map((servicio) => [servicio.id, servicio]));
-    return (citas || []).map((cita) => aplicarZonaHorario({
+    const servicioIds = [...new Set((data || []).map((cita) => cita.servicio_id))];
+    const { data: servicios, error: errorServicios } = servicioIds.length
+      ? await exigirSupabase().from("servicios").select("id, nombre, duracion_minutos").in("id", servicioIds)
+      : { data: [], error: null };
+    comprobar(errorServicios);
+    const servicioPorId = new Map((servicios || []).map((servicio) => [servicio.id, servicio]));
+    return (data || []).map((cita) => aplicarZonaHorario({
       ...cita,
-      perfiles: perfilPorId.get(cita.cliente_id) || null,
+      perfiles: { nombre: cita.nombre_cliente || "Cliente", telefono: cita.telefono_cliente || "" },
       servicios: servicioPorId.get(cita.servicio_id) || null,
     }));
   },
@@ -334,6 +338,16 @@ export const api = {
 
   async cambiarEstadoCita(id, estado) {
     const { error } = await exigirSupabase().from("citas").update({ estado }).eq("id", id);
+    comprobar(error);
+  },
+
+  async reprogramarCitaAdmin(id, fecha, hora) {
+    const { error } = await exigirSupabase().rpc("reprogramar_cita_admin", {
+      p_cita_id: id,
+      p_fecha: fecha,
+      p_hora: hora,
+      p_zona_horaria: ZONA_HORARIA,
+    });
     comprobar(error);
   },
 

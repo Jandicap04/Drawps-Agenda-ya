@@ -34,7 +34,7 @@ El SQL se puede ejecutar de nuevo si necesitas aplicar una actualización: no el
 
 3. Entra al sitio y usa **Acceso administrador**, al final de la página.
 
-Las cuentas de clientes usan celular y clave. Para registrar y verificar clientes, habilita un proveedor SMS en **Supabase → Authentication**.
+La reserva de citas no requiere cuenta: la persona elige servicio, horario, deja su nombre, celular y descripción del trabajo; el sitio guarda la cita y abre WhatsApp con esos datos. Las reservas bloquean el horario elegido para que no se cruce otra cita. El ingreso con celular y clave sigue disponible para otras funciones de cliente.
 
 ## Configurar WhatsApp del taller
 
@@ -52,6 +52,7 @@ Las cotizaciones piden los datos de contacto y del proyecto, abren WhatsApp con 
 - **Galería:** subir fotos o videos desde computadora o celular. Cada archivo queda privado como borrador hasta marcar la autorización para publicarlo.
 - La portada también muestra los modelos de moto disponibles en la carpeta del proyecto al final de **Hechos para rodar**.
 - **Citas:** consultar el calendario administrativo por día, semana o mes, ver el nombre y la hora de cada cliente, y gestionar los estados.
+- Desde la tabla administrativa se puede cambiar la fecha y hora de una cita activa; el sistema valida el horario del taller y evita conflictos con otras reservas.
 - **Cotizaciones:** revisar en su propia sección el nombre, celular, moto y trabajo solicitado, sin afectar la disponibilidad de citas.
 
 La galería acepta JPG, PNG, WebP, MP4 y WebM de hasta 100 MB por archivo. La base de datos conserva las imágenes antiguas de `galeria_forrados`; si una fila existente tiene `imagen_url`, el sitio la muestra como contenido publicado sin obligarte a volver a cargar el archivo.
@@ -60,8 +61,9 @@ La galería acepta JPG, PNG, WebP, MP4 y WebM de hasta 100 MB por archivo. La ba
 
 1. Ejecuta `npm run build`. Vite crea el sitio listo para producción en `dist`.
 2. Publica el proyecto en un hosting estático como Vercel o Netlify.
-3. En **Vercel → Settings → Environment Variables**, agrega `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` para los entornos que uses (Production, Preview y Development), y vuelve a desplegar. El archivo `.env.local` de tu computador no se publica con el sitio.
+3. En **Vercel → Settings → Environment Variables**, agrega `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY` al entorno **Production** (Preview/Development son opcionales), y vuelve a desplegar. No necesitas crear entornos personalizados ni pagar un plan superior para configurar estas variables. El archivo `.env.local` de tu computador no se publica con el sitio.
 4. En **Supabase → Authentication → URL Configuration**, configura la dirección pública del sitio como URL de redirección permitida.
 
 `base_datos.sql` también carga horarios de ejemplo y servicios iniciales. Después de ejecutarlo, revisa y ajusta estos datos para que coincidan con el horario y los servicios reales del taller.
 Si el sitio muestra que faltan variables de Supabase, revisa que ambas estén configuradas en Vercel y vuelve a desplegar después de guardarlas.
+Después de una actualización del esquema, vuelve a ejecutar `base_datos.sql` desde **Supabase → SQL Editor** para que la base de datos permita guardar reservas sin cuenta y reprogramarlas desde el panel. Las citas se guardan en Supabase, por lo que el administrador puede revisarlas en Vercel o desde una copia local conectada al mismo proyecto; no se guardan solo en el navegador.

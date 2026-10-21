@@ -462,26 +462,44 @@ export default function App() {
       mostrarAviso("Conecta Supabase para registrar una cita.");
       return;
     }
-    if (!usuario || usuario.rol !== "cliente") {
-      irAVista("cuenta");
-      mostrarAviso("Ingresa o crea tu cuenta para reservar.");
-      return;
-    }
     if (!fecha || !hora || !servicioActual) {
       mostrarAviso("Elige el servicio, la fecha y la hora disponibles.");
       return;
     }
-    const form = new FormData(event.currentTarget);
+    const formulario = event.currentTarget;
+    const datos = new FormData(formulario);
+    const nombre = String(datos.get("nombre") || "").trim();
+    const telefono = String(datos.get("telefono") || "").trim();
+    const motocicleta = String(datos.get("motocicleta") || "").trim();
+    const notas = String(datos.get("notas") || "").trim();
+    const mensajeWhatsApp = [
+      "Hola, quiero solicitar una cita en DWRAPS.",
+      `Nombre: ${nombre}`,
+      `Celular: ${telefono}`,
+      `Moto: ${motocicleta}`,
+      `Servicio: ${servicioActual.nombre}`,
+      `Día: ${textoFecha(fecha, { weekday: "long", day: "numeric", month: "long", year: "numeric" })}`,
+      `Hora: ${hora}`,
+      `Trabajo que necesito: ${notas}`,
+    ].join("\n");
+    const enlace = enlaceWhatsApp(configuracion.whatsapp_numero, mensajeWhatsApp);
+    if (enlace) window.open(enlace, "_blank", "noopener,noreferrer");
     try {
-      await api.crearCita({
+      await api.solicitarCita({
+        nombre,
+        telefono,
         servicio_id: servicioId,
         fecha,
         hora,
-        motocicleta: String(form.get("motocicleta") || "").trim(),
-        notas: String(form.get("notas") || "").trim(),
+        motocicleta,
+        notas,
       });
+      formulario.reset();
       setHora("");
-      mostrarAviso("Solicitud enviada. El taller confirmará tu cita.");
+      setFecha("");
+      mostrarAviso(enlace
+        ? "La cita quedó guardada y enviamos el mensaje preparado por WhatsApp."
+        : "La cita quedó guardada. El taller se comunicará contigo.");
       irAVista("inicio");
     } catch (error) {
       mostrarAviso(error.message);
@@ -570,6 +588,19 @@ export default function App() {
       setResumenAdmin(await api.resumenAdmin());
     } catch (error) {
       mostrarAviso(error.message);
+    }
+  }
+
+  async function reprogramarCita(id, nuevaFecha, nuevaHora) {
+    try {
+      await api.reprogramarCitaAdmin(id, nuevaFecha, nuevaHora);
+      setCitasAdmin(await api.citasAdmin());
+      setResumenAdmin(await api.resumenAdmin());
+      mostrarAviso("Fecha y hora de la cita actualizadas.");
+      return true;
+    } catch (error) {
+      mostrarAviso(error.message);
+      return false;
     }
   }
 
@@ -878,12 +909,13 @@ export default function App() {
               </section>
               {contenidoCalendario()}
               <form className="form-card booking-form" onSubmit={enviarReserva}>
-                <div className="step-heading"><span className="step-number">03</span><div><h2>Tus datos</h2><p>Ingresa con tu celular para crear una cita.</p></div></div>
-                {usuario?.rol === "cliente" ? <p className="signed-in-note">Sesión: {usuario.nombre} · {usuario.telefono}</p> : <p className="signed-in-note">Para reservar necesitarás una cuenta de cliente. <button type="button" className="inline-button" onClick={() => { setTipoAcceso("ingreso"); irAVista("cuenta"); }}>Ingresar o crear cuenta</button></p>}
+                <div className="step-heading"><span className="step-number">03</span><div><h2>Envía tu solicitud</h2><p>Déjanos tus datos y cuéntanos qué necesitas. No hace falta crear una cuenta.</p></div></div>
                 <div className="form-grid">
-                  <label className="field-wide">Marca, modelo y año de tu moto<input name="motocicleta" placeholder="Ej. Yamaha MT-07, 2023" required /></label>
-                  <label className="field-wide">Cuéntanos un poco más <span className="optional">(opcional)</span><textarea name="notas" rows="3" placeholder="Colores, referencias o detalles que debamos conocer" /></label>
-                  <div className="field-wide form-foot"><p>El precio se confirmará contigo antes de iniciar el trabajo.</p><button className="button button-primary" type="submit" disabled={!apiConectada}>Confirmar cita →</button></div>
+                  <label>Nombre completo<input name="nombre" autoComplete="name" required minLength="2" maxLength="120" placeholder="¿Cómo te llamas?" /></label>
+                  <label>Celular<input name="telefono" type="tel" inputMode="tel" autoComplete="tel" required minLength="8" maxLength="20" placeholder="Tu número de contacto" /></label>
+                  <label className="field-wide">Marca, modelo y año de tu moto<input name="motocicleta" placeholder="Ej. Yamaha MT-07, 2023" required minLength="2" maxLength="160" /></label>
+                  <label className="field-wide">¿Qué trabajo quieres realizar?<textarea name="notas" rows="3" placeholder="Cuéntanos qué quieres hacerle a tu moto" required minLength="5" maxLength="2000" /></label>
+                  <div className="field-wide form-foot"><p>Tu solicitud y horario quedan guardados. El taller confirmará la cita contigo.</p><button className="button button-primary" type="submit" disabled={!apiConectada || !fecha || !hora}>Enviar solicitud por WhatsApp →</button></div>
                 </div>
               </form>
             </div>
@@ -892,7 +924,7 @@ export default function App() {
               <div className="summary-row"><span>Duración estimada</span><strong>{servicioActual ? duracionTexto(servicioActual.duracion_minutos) : "—"}</strong></div>
               <div className="summary-row"><span>Fecha</span><strong>{fecha ? textoFecha(fecha) : "Selecciona un día"}</strong></div>
               <div className="summary-row"><span>Hora</span><strong>{hora || "—"}</strong></div>
-              <div className="summary-note"><span>ⓘ</span><p>El precio final puede variar según el estado y modelo de tu moto.</p></div>
+              <div className="summary-note"><span>ⓘ</span><p>Tu solicitud quedará guardada y enviaremos estos datos al taller por WhatsApp. El horario se reservará para evitar cruces.</p></div>
             </aside>
           </div>
         </main>
@@ -964,7 +996,7 @@ export default function App() {
                 <article className="stat-card"><span>Cotizaciones nuevas</span><strong>{resumenAdmin?.valoraciones_nuevas ?? 0}</strong><small>Por revisar</small></article>
                 <article className="stat-card"><span>Servicios activos</span><strong>{resumenAdmin?.servicios_activos ?? 0}</strong><small>En tu catálogo</small></article>
               </div>
-              <div className="admin-card"><div className="admin-card-head"><div><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Próximas citas</h2></div><button className="inline-button" onClick={() => setPestanaAdmin("citas")}>Ver todas →</button></div><TablaCitas citas={citasAdmin.filter((cita) => ["pendiente", "confirmada"].includes(cita.estado)).slice(0, 5)} alCambiar={actualizarEstadoCita} /></div>
+              <div className="admin-card"><div className="admin-card-head"><div><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Próximas citas</h2></div><button className="inline-button" onClick={() => setPestanaAdmin("citas")}>Ver todas →</button></div><TablaCitas citas={citasAdmin.filter((cita) => ["pendiente", "confirmada"].includes(cita.estado)).slice(0, 5)} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} /></div>
             </> : null}
             {!cargandoAdmin && pestanaAdmin === "citas" ? (
               <>
@@ -982,7 +1014,7 @@ export default function App() {
                 <section className="admin-card">
                   <p className="eyebrow eyebrow-dark">GESTIÓN</p>
                   <h2>Detalle y estado de las citas</h2>
-                  <TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} />
+                  <TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} />
                 </section>
               </>
             ) : null}
@@ -1078,10 +1110,57 @@ export default function App() {
   );
 }
 
-function TablaCitas({ citas, alCambiar }) {
+function TablaCitas({ citas, alCambiar, alReprogramar }) {
+  const [citaEditando, setCitaEditando] = useState("");
+  const [fechaEditada, setFechaEditada] = useState("");
+  const [horaEditada, setHoraEditada] = useState("");
+  const [guardandoEdicion, setGuardandoEdicion] = useState(false);
+
   if (!citas.length) return <TablaVacia texto="Todavía no hay citas para mostrar." />;
+  async function guardarProgramacion(id) {
+    setGuardandoEdicion(true);
+    try {
+      const guardado = await alReprogramar(id, fechaEditada, horaEditada);
+      if (guardado) setCitaEditando("");
+    } finally {
+      setGuardandoEdicion(false);
+    }
+  }
+
   return <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Fecha y hora</th><th>Cliente / moto</th><th>Servicio</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
-    {citas.map((cita) => <tr key={cita.id}><td><strong>{textoFecha(cita.fecha, { day: "numeric", month: "short", year: "numeric" })}</strong><br />{cita.hora}</td><td><strong>{cita.nombre_cliente}</strong><br />{cita.telefono_cliente}<br />{cita.motocicleta}</td><td>{cita.nombre_servicio}<br /><span>{duracionTexto(cita.duracion_minutos)}</span></td><td><span className={`status-pill ${cita.estado}`}>{cita.estado}</span></td><td><div className="table-actions">{cita.estado === "pendiente" ? <button className="table-action" onClick={() => alCambiar(cita.id, "confirmada")}>Confirmar</button> : null}{["pendiente", "confirmada"].includes(cita.estado) ? <button className="table-action" onClick={() => alCambiar(cita.id, "cancelada")}>Cancelar</button> : null}{cita.estado === "confirmada" ? <button className="table-action" onClick={() => alCambiar(cita.id, "completada")}>Completar</button> : null}</div></td></tr>)}
+    {citas.map((cita) => {
+      const editando = citaEditando === cita.id;
+      return (
+        <tr key={cita.id}>
+          <td>
+            {editando ? (
+              <div className="reschedule-form">
+                <label>Fecha<input type="date" value={fechaEditada} min={fechaLocal(new Date())} required onChange={(event) => setFechaEditada(event.target.value)} /></label>
+                <label>Hora<input type="time" value={horaEditada} step="1800" required onChange={(event) => setHoraEditada(event.target.value)} /></label>
+              </div>
+            ) : <><strong>{textoFecha(cita.fecha, { day: "numeric", month: "short", year: "numeric" })}</strong><br />{cita.hora}</>}
+          </td>
+          <td><strong>{cita.nombre_cliente}</strong><br />{cita.telefono_cliente}<br />{cita.motocicleta}</td>
+          <td>{cita.nombre_servicio}<br /><span>{duracionTexto(cita.duracion_minutos)}</span></td>
+          <td><span className={`status-pill ${cita.estado}`}>{cita.estado}</span></td>
+          <td><div className="table-actions">
+            {editando ? (
+              <>
+                <button className="table-action" type="button" disabled={guardandoEdicion || !fechaEditada || !horaEditada} onClick={() => guardarProgramacion(cita.id)}>{guardandoEdicion ? "Guardando…" : "Guardar horario"}</button>
+                <button className="table-action" type="button" disabled={guardandoEdicion} onClick={() => setCitaEditando("")}>Cancelar edición</button>
+              </>
+            ) : (
+              <>
+                {["pendiente", "confirmada"].includes(cita.estado) ? <button className="table-action" type="button" onClick={() => { setCitaEditando(cita.id); setFechaEditada(cita.fecha); setHoraEditada(cita.hora); }}>Cambiar fecha/hora</button> : null}
+                {cita.estado === "pendiente" ? <button className="table-action" type="button" onClick={() => alCambiar(cita.id, "confirmada")}>Confirmar</button> : null}
+                {["pendiente", "confirmada"].includes(cita.estado) ? <button className="table-action" type="button" onClick={() => alCambiar(cita.id, "cancelada")}>Cancelar</button> : null}
+                {cita.estado === "confirmada" ? <button className="table-action" type="button" onClick={() => alCambiar(cita.id, "completada")}>Completar</button> : null}
+              </>
+            )}
+          </div></td>
+        </tr>
+      );
+    })}
   </tbody></table></div>;
 }
 

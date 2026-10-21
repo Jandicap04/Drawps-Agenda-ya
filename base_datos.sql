@@ -65,8 +65,10 @@ CREATE TABLE IF NOT EXISTS public.horarios_atencion (
 
 CREATE TABLE IF NOT EXISTS public.citas (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    cliente_id UUID NOT NULL REFERENCES public.perfiles(id) ON DELETE RESTRICT,
+    cliente_id UUID REFERENCES public.perfiles(id) ON DELETE RESTRICT,
     servicio_id UUID NOT NULL REFERENCES public.servicios(id) ON DELETE RESTRICT,
+    nombre_cliente TEXT NOT NULL DEFAULT '',
+    telefono_cliente TEXT NOT NULL DEFAULT '',
     motocicleta TEXT NOT NULL CHECK (length(trim(motocicleta)) BETWEEN 2 AND 160),
     inicio TIMESTAMPTZ NOT NULL,
     fin TIMESTAMPTZ NOT NULL,
@@ -80,6 +82,19 @@ CREATE TABLE IF NOT EXISTS public.citas (
         EXCLUDE USING gist (tstzrange(inicio, fin, '[)') WITH &&)
         WHERE (estado IN ('pendiente', 'confirmada'))
 );
+
+ALTER TABLE public.citas
+    ALTER COLUMN cliente_id DROP NOT NULL,
+    ADD COLUMN IF NOT EXISTS nombre_cliente TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS telefono_cliente TEXT NOT NULL DEFAULT '';
+
+UPDATE public.citas AS c
+SET
+    nombre_cliente = COALESCE(NULLIF(c.nombre_cliente, ''), p.nombre, 'Cliente'),
+    telefono_cliente = COALESCE(NULLIF(c.telefono_cliente, ''), p.telefono, '')
+FROM public.perfiles AS p
+WHERE p.id = c.cliente_id
+  AND (c.nombre_cliente = '' OR c.telefono_cliente = '');
 
 CREATE TABLE IF NOT EXISTS public.solicitudes_valoracion (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -419,10 +434,144 @@ BEGIN
 
     v_inicio := (p_fecha + p_hora) AT TIME ZONE p_zona_horaria;
     v_fin := v_inicio + make_interval(mins => v_duracion);
-    INSERT INTO public.citas (cliente_id, servicio_id, motocicleta, inicio, fin, notas)
-    VALUES (v_usuario, p_servicio_id, trim(p_motocicleta), v_inicio, v_fin, COALESCE(trim(p_notas), ''))
+    INSERT INTO public.citas (
+        cliente_id, servicio_id, nombre_cliente, telefono_cliente, motocicleta, inicio, fin, notas
+    )
+    SELECT
+        v_usuario, p_servicio_id, p.nombre, COALESCE(p.telefono, ''),
+        trim(p_motocicleta), v_inicio, v_fin, COALESCE(trim(p_notas), '')
+    FROM public.perfiles p
+    WHERE p.id = v_usuario
     RETURNING id INTO v_cita;
     RETURN v_cita;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.solicitar_cita(
+    p_nombre_cliente TEXT,
+    p_telefono_cliente TEXT,
+    p_servicio_id UUID,
+    p_fecha DATE,
+    p_hora TIME,
+    p_motocicleta TEXT,
+    p_notas TEXT,
+    p_zona_horaria TEXT DEFAULT 'America/Bogota'
+)
+RETURNS UUID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_inicio TIMESTAMPTZ;
+    v_fin TIMESTAMPTZ;
+    v_duracion INTEGER;
+    v_cita UUID;
+BEGIN
+    IF length(trim(COALESCE(p_nombre_cliente, ''))) NOT BETWEEN 2 AND 120
+       OR length(regexp_replace(COALESCE(p_telefono_cliente, ''), '\D', '', 'g')) NOT BETWEEN 8 AND 15
+       OR length(trim(COALESCE(p_motocicleta, ''))) NOT BETWEEN 2 AND 160
+       OR length(COALESCE(p_notas, '')) NOT BETWEEN 5 AND 2000
+    THEN
+        RAISE EXCEPTION 'Revisa el nombre, celular, moto y descripción del trabajo.';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = p_zona_horaria) THEN
+        RAISE EXCEPTION 'La zona horaria no es válida.';
+    END IF;
+    IF NOT EXISTS (
+        SELECT 1
+        FROM public.obtener_disponibilidad(p_servicio_id, p_fecha, p_zona_horaria) d
+        WHERE d.hora = to_char(p_hora, 'HH24:MI')
+    ) THEN
+        RAISE EXCEPTION 'Ese horario ya no está disponible. Elige otro.';
+    END IF;
+
+    SELECT duracion_minutos INTO v_duracion
+    FROM public.servicios WHERE id = p_servicio_id AND activo = TRUE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'El servicio ya no está disponible.';
+    END IF;
+
+    v_inicio := (p_fecha + p_hora) AT TIME ZONE p_zona_horaria;
+    v_fin := v_inicio + make_interval(mins => v_duracion);
+    BEGIN
+        INSERT INTO public.citas (
+            servicio_id, nombre_cliente, telefono_cliente, motocicleta, inicio, fin, notas
+        )
+        VALUES (
+            p_servicio_id, trim(p_nombre_cliente),
+            regexp_replace(trim(p_telefono_cliente), '\s', '', 'g'),
+            trim(p_motocicleta), v_inicio, v_fin, trim(p_notas)
+        )
+        RETURNING id INTO v_cita;
+    EXCEPTION WHEN exclusion_violation THEN
+        RAISE EXCEPTION 'Ese horario acaba de ser reservado. Elige otro.';
+    END;
+    RETURN v_cita;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.reprogramar_cita_admin(
+    p_cita_id UUID,
+    p_fecha DATE,
+    p_hora TIME,
+    p_zona_horaria TEXT DEFAULT 'America/Bogota'
+)
+RETURNS VOID
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = ''
+AS $$
+DECLARE
+    v_cita public.citas%ROWTYPE;
+    v_horario public.horarios_atencion%ROWTYPE;
+    v_duracion INTEGER;
+    v_inicio TIMESTAMPTZ;
+    v_fin TIMESTAMPTZ;
+BEGIN
+    IF NOT (SELECT public.es_administrador()) THEN
+        RAISE EXCEPTION 'Solo la persona administradora puede reprogramar citas.';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = p_zona_horaria) THEN
+        RAISE EXCEPTION 'La zona horaria no es válida.';
+    END IF;
+
+    SELECT * INTO v_cita FROM public.citas WHERE id = p_cita_id FOR UPDATE;
+    IF NOT FOUND OR v_cita.estado NOT IN ('pendiente', 'confirmada') THEN
+        RAISE EXCEPTION 'No se puede cambiar la fecha de esta cita.';
+    END IF;
+    SELECT duracion_minutos INTO v_duracion FROM public.servicios WHERE id = v_cita.servicio_id;
+    SELECT * INTO v_horario FROM public.horarios_atencion
+    WHERE dia_semana = EXTRACT(ISODOW FROM p_fecha)::SMALLINT AND activo = TRUE;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'El taller no atiende ese día.';
+    END IF;
+    IF p_fecha < (NOW() AT TIME ZONE p_zona_horaria)::DATE
+       OR (p_fecha = (NOW() AT TIME ZONE p_zona_horaria)::DATE
+           AND p_hora <= (NOW() AT TIME ZONE p_zona_horaria)::TIME)
+       OR p_hora < v_horario.hora_apertura
+       OR p_hora + make_interval(mins => v_duracion) > v_horario.hora_cierre
+       OR mod(EXTRACT(EPOCH FROM (p_hora - v_horario.hora_apertura))::INTEGER, 1800) <> 0
+    THEN
+        RAISE EXCEPTION 'Elige una hora futura dentro del horario de atención.';
+    END IF;
+
+    v_inicio := (p_fecha + p_hora) AT TIME ZONE p_zona_horaria;
+    v_fin := v_inicio + make_interval(mins => v_duracion);
+    IF EXISTS (
+        SELECT 1 FROM public.citas c
+        WHERE c.id <> p_cita_id
+          AND c.estado IN ('pendiente', 'confirmada')
+          AND tstzrange(c.inicio, c.fin, '[)') && tstzrange(v_inicio, v_fin, '[)')
+    ) THEN
+        RAISE EXCEPTION 'Ese horario ya está ocupado. Elige otro.';
+    END IF;
+
+    BEGIN
+        UPDATE public.citas SET inicio = v_inicio, fin = v_fin WHERE id = p_cita_id;
+    EXCEPTION WHEN exclusion_violation THEN
+        RAISE EXCEPTION 'Ese horario acaba de ser ocupado. Elige otro.';
+    END;
 END;
 $$;
 
@@ -430,6 +579,10 @@ REVOKE ALL ON FUNCTION public.obtener_disponibilidad(UUID, DATE, TEXT) FROM PUBL
 GRANT EXECUTE ON FUNCTION public.obtener_disponibilidad(UUID, DATE, TEXT) TO anon, authenticated;
 REVOKE ALL ON FUNCTION public.crear_cita(UUID, DATE, TIME, TEXT, TEXT, TEXT) FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.crear_cita(UUID, DATE, TIME, TEXT, TEXT, TEXT) TO authenticated;
+REVOKE ALL ON FUNCTION public.solicitar_cita(TEXT, TEXT, UUID, DATE, TIME, TEXT, TEXT, TEXT) FROM PUBLIC;
+GRANT EXECUTE ON FUNCTION public.solicitar_cita(TEXT, TEXT, UUID, DATE, TIME, TEXT, TEXT, TEXT) TO anon, authenticated;
+REVOKE ALL ON FUNCTION public.reprogramar_cita_admin(UUID, DATE, TIME, TEXT) FROM PUBLIC, anon;
+GRANT EXECUTE ON FUNCTION public.reprogramar_cita_admin(UUID, DATE, TIME, TEXT) TO authenticated;
 
 ALTER TABLE public.perfiles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.servicios ENABLE ROW LEVEL SECURITY;
