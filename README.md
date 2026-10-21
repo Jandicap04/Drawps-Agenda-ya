@@ -34,7 +34,7 @@ El SQL se puede ejecutar de nuevo si necesitas aplicar una actualización: no el
 
 3. Entra al sitio y usa **Acceso administrador**, al final de la página.
 
-La reserva de citas no requiere cuenta: la persona elige servicio, horario, deja su nombre, celular y descripción del trabajo; el sitio guarda la cita y abre WhatsApp con esos datos. Las reservas bloquean el horario elegido para que no se cruce otra cita. El ingreso con celular y clave sigue disponible para otras funciones de cliente.
+Las personas no necesitan crear una cuenta para usar el sitio. Al reservar, eligen servicio y horario, y dejan su nombre, celular de contacto, moto y descripción del trabajo; el sitio guarda la cita y abre WhatsApp con esos datos. Las reservas bloquean el horario elegido para que no se cruce otra cita. El inicio de sesión queda reservado para la persona administradora.
 
 ## Configurar WhatsApp del taller
 

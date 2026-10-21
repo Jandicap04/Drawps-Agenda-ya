@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
+import { supabaseConfigurado } from "./supabase.js";
 import logo from "../LOGO1.jpg";
 import imagenModeloUno from "../MODELO 1.png";
 import imagenModeloDos from "../MODELO 2.png";
@@ -244,7 +245,6 @@ export default function App() {
   const [apiConectada, setApiConectada] = useState(false);
   const [mensajeApi, setMensajeApi] = useState("Conectando con el servidor…");
   const [usuario, setUsuario] = useState(null);
-  const [telefonoPendiente, setTelefonoPendiente] = useState("");
   const [servicioId, setServicioId] = useState(serviciosDeMuestra[0].id);
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [fecha, setFecha] = useState("");
@@ -252,7 +252,6 @@ export default function App() {
   const [horarios, setHorarios] = useState([]);
   const [cargandoHorarios, setCargandoHorarios] = useState(false);
   const [errorHorarios, setErrorHorarios] = useState("");
-  const [tipoAcceso, setTipoAcceso] = useState("ingreso");
   const [aviso, setAviso] = useState("");
   const [pestanaAdmin, setPestanaAdmin] = useState("resumen");
   const [resumenAdmin, setResumenAdmin] = useState(null);
@@ -312,12 +311,14 @@ export default function App() {
         if (ajustes.status === "fulfilled") setConfiguracion(ajustes.value);
         else errores.push(`diseño: ${ajustes.reason.message}`);
         setMensajeApi(errores.length
-          ? `Supabase está conectado, pero faltan tablas o columnas (${errores.join("; ")}). Actualiza el esquema con base_datos.sql.`
+          ? `Supabase está conectado, pero algunas consultas fallaron (${errores.join("; ")}). Revisa el error indicado y ejecuta base_datos.sql si falta una tabla o columna.`
           : "");
       } catch (error) {
         if (!vigente) return;
         setApiConectada(false);
-        setMensajeApi(`Supabase aún no está listo: ${error.message}. Configura VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY en Vercel (o en .env.local para desarrollo) y confirma que base_datos.sql esté aplicado en Supabase.`);
+        setMensajeApi(supabaseConfigurado
+          ? `No se pudo iniciar la conexión con Supabase: ${error.message}`
+          : "Faltan VITE_SUPABASE_URL y VITE_SUPABASE_PUBLISHABLE_KEY. Configúralas en Vercel o en .env.local y reinicia la aplicación local.");
       }
     }
     iniciar();
@@ -428,34 +429,6 @@ export default function App() {
     window.setTimeout(() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" }), 0);
   }
 
-  async function enviarAcceso(event) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    const datos = {
-      telefono: String(form.get("telefono") || "").trim(),
-      clave: String(form.get("clave") || ""),
-      nombre: String(form.get("nombre") || "").trim(),
-    };
-    try {
-      if (tipoAcceso === "registro") {
-        const cuenta = await api.registrarCliente(datos);
-        if (cuenta.requiereVerificacion) {
-          setTelefonoPendiente(cuenta.telefono);
-          mostrarAviso("Revisa tus mensajes: te enviamos un código para verificar tu celular.");
-          return;
-        }
-        setUsuario(cuenta.usuario);
-      } else {
-        const cuenta = await api.ingresarCliente(datos);
-        setUsuario(cuenta.usuario);
-      }
-      irAVista("reservar");
-      mostrarAviso("Ya puedes continuar con tu cita.");
-    } catch (error) {
-      mostrarAviso(error.message);
-    }
-  }
-
   async function enviarReserva(event) {
     event.preventDefault();
     if (!apiConectada) {
@@ -552,20 +525,6 @@ export default function App() {
       });
       setUsuario(resultado.usuario);
       irAVista("administracion");
-    } catch (error) {
-      mostrarAviso(error.message);
-    }
-  }
-
-  async function verificarCelular(event) {
-    event.preventDefault();
-    const codigo = String(new FormData(event.currentTarget).get("codigo") || "").trim();
-    try {
-      const resultado = await api.verificarTelefono({ telefono: telefonoPendiente, codigo });
-      setUsuario(resultado.usuario);
-      setTelefonoPendiente("");
-      irAVista("reservar");
-      mostrarAviso("Celular verificado. Ya puedes reservar.");
     } catch (error) {
       mostrarAviso(error.message);
     }
@@ -807,7 +766,7 @@ export default function App() {
         </nav>
         <div className="top-actions">
           {usuario ? <span className="user-greeting">Hola, {usuario.nombre?.split(" ")[0] || "bienvenido"}</span> : null}
-          {usuario ? <button className="button button-quiet" onClick={cerrarSesion}>Salir</button> : <button className="account-icon" aria-label="Ingresar" onClick={() => { setTipoAcceso("ingreso"); irAVista("cuenta"); }}>♙</button>}
+          {usuario ? <button className="button button-quiet" onClick={cerrarSesion}>Salir</button> : null}
           <button className="button button-primary button-small" onClick={() => irAVista("reservar")}>▣ &nbsp; Reservar <span aria-hidden="true">→</span></button>
           <button className="mobile-menu" aria-label="Menú" onClick={(event) => event.currentTarget.parentElement.previousElementSibling.classList.toggle("open")}>☰</button>
         </div>
@@ -943,32 +902,6 @@ export default function App() {
               <div className="field-wide form-foot"><p>Usaremos tu número solo para responder esta solicitud.</p><button className="button button-primary" type="submit" disabled={!apiConectada}>Enviar solicitud →</button></div>
             </div>
           </form>
-        </main>
-      ) : null}
-
-      {vista === "cuenta" ? (
-        <main className="section-wrap inner-view auth-view">
-          <section className="auth-card form-card">
-            <p className="eyebrow eyebrow-dark">TU ESPACIO</p><h1>{tipoAcceso === "registro" ? <>Crea tu <span>cuenta.</span></> : <>Ingresa a tu <span>cuenta.</span></>}</h1>
-            <p>Usa tu celular y una clave para reservar y gestionar tus citas.</p>
-            <form className="auth-form" onSubmit={telefonoPendiente ? verificarCelular : enviarAcceso}>
-              {telefonoPendiente ? (
-                <>
-                  <p className="signed-in-note">Enviamos un código SMS al {telefonoPendiente}. Ingrésalo para verificar tu número.</p>
-                  <label>Código de verificación<input name="codigo" inputMode="numeric" autoComplete="one-time-code" required minLength="4" /></label>
-                  <button className="button button-primary button-full" type="submit">Verificar celular →</button>
-                </>
-              ) : (
-                <>
-                  {tipoAcceso === "registro" ? <label>Nombre completo<input name="nombre" autoComplete="name" required minLength="2" /></label> : null}
-                  <label>Celular<input name="telefono" inputMode="tel" autoComplete="tel" placeholder="+código de país y número" required /></label>
-                  <label>Clave<input name="clave" type="password" minLength="8" autoComplete={tipoAcceso === "registro" ? "new-password" : "current-password"} required /></label>
-                  <button className="button button-primary button-full" type="submit">{tipoAcceso === "registro" ? "Crear cuenta" : "Ingresar"}</button>
-                </>
-              )}
-            </form>
-            {!telefonoPendiente ? <p className="auth-switch">{tipoAcceso === "registro" ? "¿Ya tienes cuenta?" : "¿Primera vez aquí?"} <button className="inline-button" onClick={() => setTipoAcceso(tipoAcceso === "registro" ? "ingreso" : "registro")}>{tipoAcceso === "registro" ? "Ingresar" : "Crear cuenta"}</button></p> : null}
-          </section>
         </main>
       ) : null}
 

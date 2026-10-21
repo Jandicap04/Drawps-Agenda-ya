@@ -196,35 +196,6 @@ export const api = {
     return { fecha, horarios: (data || []).map((fila) => fila.hora) };
   },
 
-  async registrarCliente({ telefono, clave, nombre }) {
-    const { data, error } = await exigirSupabase().auth.signUp({
-      phone: telefono,
-      password: clave,
-      options: { data: { nombre } },
-    });
-    comprobar(error);
-    if (!data.session) {
-      return { requiereVerificacion: true, telefono };
-    }
-    return { usuario: await obtenerPerfil(data.user) };
-  },
-
-  async verificarTelefono({ telefono, codigo }) {
-    const { data, error } = await exigirSupabase().auth.verifyOtp({
-      phone: telefono,
-      token: codigo,
-      type: "sms",
-    });
-    comprobar(error);
-    return { usuario: await obtenerPerfil(data.user) };
-  },
-
-  async ingresarCliente({ telefono, clave }) {
-    const { data, error } = await exigirSupabase().auth.signInWithPassword({ phone: telefono, password: clave });
-    comprobar(error);
-    return { usuario: await obtenerPerfil(data.user) };
-  },
-
   async ingresarAdmin({ correo, clave }) {
     const { data, error } = await exigirSupabase().auth.signInWithPassword({ email: correo, password: clave });
     comprobar(error);
