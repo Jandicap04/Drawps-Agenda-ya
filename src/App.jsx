@@ -1,5 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { api } from "./api.js";
+import logo from "../LOGO1.jpg";
+import imagenModeloDos from "../MODELO 2.png";
+
+const configuracionInicial = {
+  color_primario: "#c9fa58",
+  color_acento: "#a2d83b",
+  color_fondo_oscuro: "#0d1317",
+  imagen_portada_url: "",
+};
 
 const serviciosDeMuestra = [
   { id: "forrado-completo", nombre: "Forrado completo", descripcion: "Un cambio total de color y personalidad para tu moto.", duracion_minutos: 240, precio_desde: null },
@@ -30,7 +39,7 @@ function duracionTexto(minutos = 0) {
 function precioTexto(precio) {
   return precio === null || precio === undefined
     ? "Precio por confirmar"
-    : `Desde ${Number(precio).toLocaleString("es")} (por confirmar)`;
+    : `Desde ${new Intl.NumberFormat("es-CO", { style: "currency", currency: "COP", maximumFractionDigits: 0 }).format(Number(precio))} (por confirmar)`;
 }
 
 function Calendario({ mes, fechaSeleccionada, alCambiarMes, alElegirFecha }) {
@@ -84,6 +93,7 @@ export default function App() {
   const [apiConectada, setApiConectada] = useState(false);
   const [mensajeApi, setMensajeApi] = useState("Conectando con el servidor…");
   const [usuario, setUsuario] = useState(null);
+  const [telefonoPendiente, setTelefonoPendiente] = useState("");
   const [servicioId, setServicioId] = useState(serviciosDeMuestra[0].id);
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [fecha, setFecha] = useState("");
@@ -97,6 +107,15 @@ export default function App() {
   const [resumenAdmin, setResumenAdmin] = useState(null);
   const [citasAdmin, setCitasAdmin] = useState([]);
   const [valoracionesAdmin, setValoracionesAdmin] = useState([]);
+  const [galeria, setGaleria] = useState([]);
+  const [galeriaAdmin, setGaleriaAdmin] = useState([]);
+  const [configuracion, setConfiguracion] = useState(configuracionInicial);
+  const [serviciosAdmin, setServiciosAdmin] = useState([]);
+  const [servicioEditando, setServicioEditando] = useState(null);
+  const [guardandoServicio, setGuardandoServicio] = useState(false);
+  const [subiendoPortada, setSubiendoPortada] = useState(false);
+  const [permisosPublicacion, setPermisosPublicacion] = useState({});
+  const [subiendoMedia, setSubiendoMedia] = useState(false);
   const [cargandoAdmin, setCargandoAdmin] = useState(false);
   const [servicioCotizacion, setServicioCotizacion] = useState("");
   const [motoCotizacion, setMotoCotizacion] = useState("");
@@ -109,24 +128,50 @@ export default function App() {
 
   useEffect(() => {
     let vigente = true;
-    api.estado()
-      .then(async (resultado) => {
+    let subscription;
+    async function iniciar() {
+      try {
+        const estado = await api.estado();
         if (!vigente) return;
         setApiConectada(true);
-        setMensajeApi("");
-        setUsuario(resultado.usuario || null);
-        const catalogo = await api.servicios();
+        setUsuario(estado.usuario || null);
+        subscription = api.observarSesion((perfil, error) => {
+          if (!vigente) return;
+          if (error) mostrarAviso(error.message);
+          setUsuario(perfil);
+        }).data.subscription;
+        const resultados = await Promise.allSettled([
+          api.servicios(),
+          api.galeriaPublica(),
+          api.configuracionSitio(),
+        ]);
         if (!vigente) return;
-        setServicios(catalogo);
-        if (catalogo.length && !catalogo.some((servicio) => servicio.id === servicioId)) {
-          setServicioId(catalogo[0].id);
+        const errores = [];
+        const [catalogo, trabajos, ajustes] = resultados;
+        if (catalogo.status === "fulfilled" && catalogo.value.length) {
+          setServicios(catalogo.value);
+          if (!catalogo.value.some((servicio) => servicio.id === servicioId)) setServicioId(catalogo.value[0].id);
+        } else if (catalogo.status === "rejected") {
+          errores.push(`servicios: ${catalogo.reason.message}`);
         }
-      })
-      .catch((error) => {
+        if (trabajos.status === "fulfilled") setGaleria(trabajos.value);
+        else errores.push(`galería: ${trabajos.reason.message}`);
+        if (ajustes.status === "fulfilled") setConfiguracion(ajustes.value);
+        else errores.push(`diseño: ${ajustes.reason.message}`);
+        setMensajeApi(errores.length
+          ? `Supabase está conectado, pero faltan tablas o columnas (${errores.join("; ")}). Actualiza el esquema con base_datos.sql.`
+          : "");
+      } catch (error) {
         if (!vigente) return;
-        setMensajeApi(`Vista previa: el servidor no está conectado (${error.message}). Las reservas se activarán al conectar PostgreSQL.`);
-      });
-    return () => { vigente = false; };
+        setApiConectada(false);
+        setMensajeApi(`Supabase aún no está listo: ${error.message}. Revisa .env.local y ejecuta base_datos.sql en Supabase.`);
+      }
+    }
+    iniciar();
+    return () => {
+      vigente = false;
+      subscription?.unsubscribe();
+    };
   }, []);
 
   useEffect(() => {
@@ -158,17 +203,50 @@ export default function App() {
     if (vista !== "administracion" || usuario?.rol !== "administrador") return;
     let vigente = true;
     setCargandoAdmin(true);
-    Promise.all([api.resumenAdmin(), api.citasAdmin(), api.valoracionesAdmin()])
-      .then(([resumen, citas, valoraciones]) => {
+    Promise.allSettled([
+      api.resumenAdmin(),
+      api.citasAdmin(),
+      api.valoracionesAdmin(),
+      api.galeriaAdmin(),
+      api.serviciosAdmin(),
+      api.configuracionSitio(),
+    ])
+      .then((resultados) => {
         if (!vigente) return;
-        setResumenAdmin(resumen);
-        setCitasAdmin(citas);
-        setValoracionesAdmin(valoraciones);
+        const errores = [];
+        const asignar = (indice, etiqueta, setter) => {
+          const resultado = resultados[indice];
+          if (resultado.status === "fulfilled") setter(resultado.value);
+          else errores.push(`${etiqueta}: ${resultado.reason.message}`);
+        };
+        asignar(0, "resumen", setResumenAdmin);
+        asignar(1, "citas", setCitasAdmin);
+        asignar(2, "valoraciones", setValoracionesAdmin);
+        asignar(3, "galería", setGaleriaAdmin);
+        asignar(4, "servicios", setServiciosAdmin);
+        asignar(5, "diseño", setConfiguracion);
+        if (errores.length) mostrarAviso(`Algunas secciones necesitan actualizar Supabase: ${errores.join("; ")}`);
       })
-      .catch((error) => mostrarAviso(error.message))
       .finally(() => { if (vigente) setCargandoAdmin(false); });
     return () => { vigente = false; };
   }, [vista, usuario]);
+
+  useEffect(() => {
+    const raiz = document.documentElement;
+    raiz.style.setProperty("--lime", configuracion.color_primario);
+    raiz.style.setProperty("--accent", configuracion.color_acento);
+    raiz.style.setProperty("--night", configuracion.color_fondo_oscuro);
+    raiz.style.setProperty("--hero-bg", configuracion.color_fondo_oscuro);
+  }, [configuracion.color_primario, configuracion.color_acento, configuracion.color_fondo_oscuro]);
+
+  useEffect(() => {
+    if (vista !== "galeria" || !apiConectada) return;
+    let vigente = true;
+    api.galeriaPublica()
+      .then((trabajos) => { if (vigente) setGaleria(trabajos); })
+      .catch((error) => { if (vigente) mostrarAviso(error.message); });
+    return () => { vigente = false; };
+  }, [vista, apiConectada]);
 
   function mostrarAviso(mensaje) {
     setAviso(mensaje);
@@ -206,10 +284,18 @@ export default function App() {
       nombre: String(form.get("nombre") || "").trim(),
     };
     try {
-      const cuenta = tipoAcceso === "registro"
-        ? await api.registrarCliente(datos)
-        : await api.ingresarCliente(datos);
-      setUsuario(cuenta.usuario);
+      if (tipoAcceso === "registro") {
+        const cuenta = await api.registrarCliente(datos);
+        if (cuenta.requiereVerificacion) {
+          setTelefonoPendiente(cuenta.telefono);
+          mostrarAviso("Revisa tus mensajes: te enviamos un código para verificar tu celular.");
+          return;
+        }
+        setUsuario(cuenta.usuario);
+      } else {
+        const cuenta = await api.ingresarCliente(datos);
+        setUsuario(cuenta.usuario);
+      }
       irAVista("reservar");
       mostrarAviso("Ya puedes continuar con tu cita.");
     } catch (error) {
@@ -220,7 +306,7 @@ export default function App() {
   async function enviarReserva(event) {
     event.preventDefault();
     if (!apiConectada) {
-      mostrarAviso("Conecta el servidor y PostgreSQL para registrar una cita.");
+      mostrarAviso("Conecta Supabase para registrar una cita.");
       return;
     }
     if (!usuario || usuario.rol !== "cliente") {
@@ -289,6 +375,20 @@ export default function App() {
     }
   }
 
+  async function verificarCelular(event) {
+    event.preventDefault();
+    const codigo = String(new FormData(event.currentTarget).get("codigo") || "").trim();
+    try {
+      const resultado = await api.verificarTelefono({ telefono: telefonoPendiente, codigo });
+      setUsuario(resultado.usuario);
+      setTelefonoPendiente("");
+      irAVista("reservar");
+      mostrarAviso("Celular verificado. Ya puedes reservar.");
+    } catch (error) {
+      mostrarAviso(error.message);
+    }
+  }
+
   async function cerrarSesion() {
     try {
       await api.salir();
@@ -316,6 +416,143 @@ export default function App() {
       setResumenAdmin(await api.resumenAdmin());
     } catch (error) {
       mostrarAviso(error.message);
+    }
+  }
+
+  async function subirTrabajo(event) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const datos = new FormData(form);
+    const archivo = datos.get("archivo");
+    if (!(archivo instanceof File) || !archivo.size) {
+      mostrarAviso("Selecciona una foto o video antes de subir.");
+      return;
+    }
+    setSubiendoMedia(true);
+    try {
+      await api.subirMedia({
+        archivo,
+        titulo: String(datos.get("titulo") || ""),
+        descripcion: String(datos.get("descripcion") || ""),
+      });
+      form.reset();
+      setGaleriaAdmin(await api.galeriaAdmin());
+      mostrarAviso("Subimos el archivo como borrador privado. Confirma la autorización para publicarlo.");
+    } catch (error) {
+      mostrarAviso(error.message);
+    } finally {
+      setSubiendoMedia(false);
+    }
+  }
+
+  async function cambiarPublicacionMedia(item, publicar) {
+    if (publicar && !permisosPublicacion[item.id]) {
+      mostrarAviso("Marca la casilla de autorización para publicar este trabajo.");
+      return;
+    }
+    try {
+      await api.cambiarEstadoMedia(item, publicar);
+      setPermisosPublicacion((actual) => ({ ...actual, [item.id]: false }));
+      const [admin, publico] = await Promise.all([api.galeriaAdmin(), api.galeriaPublica()]);
+      setGaleriaAdmin(admin);
+      setGaleria(publico);
+      mostrarAviso(publicar ? "Trabajo publicado en la galería." : "Trabajo retirado de la galería pública.");
+    } catch (error) {
+      mostrarAviso(error.message);
+    }
+  }
+
+  async function eliminarTrabajo(item) {
+    if (!window.confirm(`¿Eliminar "${item.titulo}" y su archivo? Esta acción no se puede deshacer.`)) return;
+    try {
+      await api.eliminarMedia(item);
+      setGaleriaAdmin(await api.galeriaAdmin());
+      setGaleria(await api.galeriaPublica());
+      mostrarAviso("Trabajo eliminado.");
+    } catch (error) {
+      mostrarAviso(error.message);
+    }
+
+    async function guardarServicio(event) {
+      event.preventDefault();
+      const form = event.currentTarget;
+      const datos = new FormData(form);
+      const precio = String(datos.get("precio_desde") || "").trim();
+      setGuardandoServicio(true);
+      try {
+        await api.guardarServicio({
+          ...(servicioEditando?.id ? { id: servicioEditando.id } : {}),
+          nombre: String(datos.get("nombre") || "").trim(),
+          descripcion: String(datos.get("descripcion") || "").trim(),
+          duracion_minutos: Number(datos.get("duracion_minutos")),
+          precio_desde: precio ? Number(precio) : null,
+          activo: servicioEditando?.activo ?? true,
+        });
+        setServiciosAdmin(await api.serviciosAdmin());
+        const catalogo = await api.servicios();
+        setServicios(catalogo);
+        if (!servicioId && catalogo.length) setServicioId(catalogo[0].id);
+        setServicioEditando(null);
+        form.reset();
+        mostrarAviso("Servicio guardado correctamente.");
+        if (vista === "administracion") setResumenAdmin(await api.resumenAdmin());
+      } catch (error) {
+        mostrarAviso(error.message);
+      } finally {
+        setGuardandoServicio(false);
+      }
+    }
+
+    async function cambiarEstadoServicio(servicio) {
+      try {
+        await api.guardarServicio({ ...servicio, activo: !servicio.activo });
+        const [administracion, catalogo] = await Promise.all([api.serviciosAdmin(), api.servicios()]);
+        setServiciosAdmin(administracion);
+        setServicios(catalogo);
+        if (!catalogo.some((item) => item.id === servicioId)) {
+          setServicioId(catalogo[0]?.id || "");
+          setFecha("");
+          setHora("");
+        }
+        setResumenAdmin(await api.resumenAdmin());
+        mostrarAviso(servicio.activo ? "Servicio ocultado del catálogo." : "Servicio activado en el catálogo.");
+      } catch (error) {
+        mostrarAviso(error.message);
+      }
+    }
+
+    async function guardarDiseno(event) {
+      event.preventDefault();
+      const datos = new FormData(event.currentTarget);
+      const nuevoDiseno = {
+        ...configuracion,
+        color_primario: String(datos.get("color_primario")),
+        color_acento: String(datos.get("color_acento")),
+        color_fondo_oscuro: String(datos.get("color_fondo_oscuro")),
+      };
+      try {
+        await api.guardarConfiguracionSitio(nuevoDiseno);
+        setConfiguracion(nuevoDiseno);
+        mostrarAviso("Colores de la página guardados.");
+      } catch (error) {
+        mostrarAviso(error.message);
+      }
+    }
+
+    async function cambiarImagenPortada(event) {
+      const archivo = event.currentTarget.files?.[0];
+      if (!archivo) return;
+      setSubiendoPortada(true);
+      try {
+        const nuevoDiseno = await api.subirImagenPortada(archivo, configuracion);
+        setConfiguracion(nuevoDiseno);
+        mostrarAviso("Imagen principal actualizada.");
+      } catch (error) {
+        mostrarAviso(error.message);
+      } finally {
+        setSubiendoPortada(false);
+        event.currentTarget.value = "";
+      }
     }
   }
 
@@ -361,14 +598,15 @@ export default function App() {
     <>
       <header className="topbar">
         <a className="brand" href="#inicio" onClick={(event) => { event.preventDefault(); irAVista("inicio"); }}>
-          <span className="brand-mark">M</span><span>MOTO<span className="brand-light">FORMA</span></span>
+          <img className="brand-logo" src={logo} alt="DWRAPS" />
         </a>
         <nav className="main-nav" aria-label="Navegación principal">
           <button className={`nav-link ${vista === "inicio" ? "active" : ""}`} onClick={() => irAVista("inicio")}>Inicio</button>
           <button className="nav-link" onClick={() => navegarSeccion("servicios")}>Servicios</button>
-          <button className="nav-link" onClick={() => navegarSeccion("servicios")}>Galería</button>
+          <button className={`nav-link ${vista === "galeria" ? "active" : ""}`} onClick={() => irAVista("galeria")}>Galería</button>
           <button className={`nav-link ${vista === "cotizar" ? "active" : ""}`} onClick={() => irAVista("cotizar")}>Cotiza</button>
           <button className={`nav-link ${vista === "reservar" ? "active" : ""}`} onClick={() => irAVista("reservar")}>Agenda</button>
+          {usuario?.rol === "administrador" ? <button className={`nav-link ${vista === "administracion" ? "active" : ""}`} onClick={() => irAVista("administracion")}>Administración</button> : null}
         </nav>
         <div className="top-actions">
           {usuario ? <span className="user-greeting">Hola, {usuario.nombre?.split(" ")[0] || "bienvenido"}</span> : null}
@@ -393,10 +631,11 @@ export default function App() {
               </div>
               <div className="hero-proof"><span className="proof-line" /> TU MOTO, A TU MANERA</div>
             </div>
-            <div className="hero-art" role="img" aria-label="Ilustración de una motocicleta personalizada">
+            <div className="hero-art">
+              <img className="hero-photo" src={configuracion.imagen_portada_url || imagenModeloDos} alt="Motocicleta Suzuki personalizada con wrap de DWRAPS" />
               <div className="art-grid" /><div className="art-orbit orbit-one" /><div className="art-orbit orbit-two" />
+              <img className="hero-watermark" src={logo} alt="" aria-hidden="true" />
               <div className="art-label"><span /><span>HECHA PARA DESTACAR</span></div>
-              <div className="bike-placeholder"><div className="wheel wheel-back" /><div className="wheel wheel-front" /><div className="bike-body" /><div className="bike-seat" /><div className="bike-tank" /><div className="bike-fork" /><div className="bike-handle" /><div className="bike-light" /><div className="bike-frame" /><div className="bike-accent" /></div>
               <div className="art-caption"><span>PERSONALIZACIÓN A OTRO NIVEL</span><span className="caption-line" /></div>
             </div>
           </section>
@@ -442,6 +681,18 @@ export default function App() {
               ))}
             </div>
           </section>
+
+          <section className="gallery-section section-wrap" id="galeria">
+            <div className="section-heading"><div><p className="eyebrow eyebrow-dark">TRABAJOS REALES</p><h2>Hechos para <span>rodar.</span></h2></div><button className="text-button" onClick={() => irAVista("galeria")}>Ver galería →</button></div>
+            <Galeria trabajos={galeria.slice(0, 3)} />
+          </section>
+        </main>
+      ) : null}
+
+      {vista === "galeria" ? (
+        <main className="section-wrap inner-view">
+          <div className="page-heading"><p className="eyebrow eyebrow-dark">DWRAPS · BOGOTÁ</p><h1>Trabajos <span>realizados.</span></h1><p>Una muestra de proyectos publicados por el taller.</p></div>
+          <Galeria trabajos={galeria} />
         </main>
       ) : null}
 
@@ -497,13 +748,23 @@ export default function App() {
           <section className="auth-card form-card">
             <p className="eyebrow eyebrow-dark">TU ESPACIO</p><h1>{tipoAcceso === "registro" ? <>Crea tu <span>cuenta.</span></> : <>Ingresa a tu <span>cuenta.</span></>}</h1>
             <p>Usa tu celular y una clave para reservar y gestionar tus citas.</p>
-            <form className="auth-form" onSubmit={enviarAcceso}>
-              {tipoAcceso === "registro" ? <label>Nombre completo<input name="nombre" autoComplete="name" required minLength="2" /></label> : null}
-              <label>Celular<input name="telefono" inputMode="tel" autoComplete="tel" placeholder="+código de país y número" required /></label>
-              <label>Clave<input name="clave" type="password" minLength="8" autoComplete={tipoAcceso === "registro" ? "new-password" : "current-password"} required /></label>
-              <button className="button button-primary button-full" type="submit">{tipoAcceso === "registro" ? "Crear cuenta" : "Ingresar"}</button>
+            <form className="auth-form" onSubmit={telefonoPendiente ? verificarCelular : enviarAcceso}>
+              {telefonoPendiente ? (
+                <>
+                  <p className="signed-in-note">Enviamos un código SMS al {telefonoPendiente}. Ingrésalo para verificar tu número.</p>
+                  <label>Código de verificación<input name="codigo" inputMode="numeric" autoComplete="one-time-code" required minLength="4" /></label>
+                  <button className="button button-primary button-full" type="submit">Verificar celular →</button>
+                </>
+              ) : (
+                <>
+                  {tipoAcceso === "registro" ? <label>Nombre completo<input name="nombre" autoComplete="name" required minLength="2" /></label> : null}
+                  <label>Celular<input name="telefono" inputMode="tel" autoComplete="tel" placeholder="+código de país y número" required /></label>
+                  <label>Clave<input name="clave" type="password" minLength="8" autoComplete={tipoAcceso === "registro" ? "new-password" : "current-password"} required /></label>
+                  <button className="button button-primary button-full" type="submit">{tipoAcceso === "registro" ? "Crear cuenta" : "Ingresar"}</button>
+                </>
+              )}
             </form>
-            <p className="auth-switch">{tipoAcceso === "registro" ? "¿Ya tienes cuenta?" : "¿Primera vez aquí?"} <button className="inline-button" onClick={() => setTipoAcceso(tipoAcceso === "registro" ? "ingreso" : "registro")}>{tipoAcceso === "registro" ? "Ingresar" : "Crear cuenta"}</button></p>
+            {!telefonoPendiente ? <p className="auth-switch">{tipoAcceso === "registro" ? "¿Ya tienes cuenta?" : "¿Primera vez aquí?"} <button className="inline-button" onClick={() => setTipoAcceso(tipoAcceso === "registro" ? "ingreso" : "registro")}>{tipoAcceso === "registro" ? "Ingresar" : "Crear cuenta"}</button></p> : null}
           </section>
         </main>
       ) : null}
@@ -522,7 +783,7 @@ export default function App() {
           <div className="admin-top"><div><p className="eyebrow">PANEL DE ADMINISTRACIÓN</p><h1>Hola, <span>{usuario?.nombre || "administrador"}.</span></h1><p>Revisa las citas y solicitudes de tu taller.</p></div><button className="button button-quiet admin-logout" onClick={cerrarSesion}>Cerrar sesión</button></div>
           <div className="admin-content">
             <div className="admin-tabs">
-              {["resumen", "citas", "valoraciones"].map((tab) => <button key={tab} className={`admin-tab ${pestanaAdmin === tab ? "active" : ""}`} onClick={() => setPestanaAdmin(tab)}>{tab === "resumen" ? "Resumen" : tab === "citas" ? <>Citas <span className="tab-count">{citasAdmin.length}</span></> : <>Valoraciones <span className="tab-count">{valoracionesAdmin.length}</span></>}</button>)}
+              {["resumen", "citas", "valoraciones", "galeria", "servicios", "diseno"].map((tab) => <button key={tab} className={`admin-tab ${pestanaAdmin === tab ? "active" : ""}`} onClick={() => setPestanaAdmin(tab)}>{tab === "resumen" ? "Resumen" : tab === "citas" ? <>Citas <span className="tab-count">{citasAdmin.length}</span></> : tab === "valoraciones" ? <>Valoraciones <span className="tab-count">{valoracionesAdmin.length}</span></> : tab === "galeria" ? <>Galería <span className="tab-count">{galeriaAdmin.length}</span></> : tab === "servicios" ? "Servicios y precios" : "Diseño de página"}</button>)}
             </div>
             {cargandoAdmin ? <TablaVacia texto="Cargando datos del taller…" /> : null}
             {!cargandoAdmin && pestanaAdmin === "resumen" ? <>
@@ -536,17 +797,84 @@ export default function App() {
             </> : null}
             {!cargandoAdmin && pestanaAdmin === "citas" ? <div className="admin-card"><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Todas las citas</h2><TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} /></div> : null}
             {!cargandoAdmin && pestanaAdmin === "valoraciones" ? <div className="admin-card"><p className="eyebrow eyebrow-dark">PROYECTOS POR REVISAR</p><h2>Solicitudes de valoración</h2><TablaValoraciones valoraciones={valoracionesAdmin} alCambiar={actualizarEstadoValoracion} /></div> : null}
+            {!cargandoAdmin && pestanaAdmin === "galeria" ? (
+              <>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">NUEVO TRABAJO</p><h2>Subir foto o video</h2>
+                  <p className="gallery-upload-note">Los archivos se guardan como privados. No se muestran públicamente hasta que confirmes la autorización de publicación.</p>
+                  <form className="gallery-upload-form" onSubmit={subirTrabajo}>
+                    <label>Título<input name="titulo" required minLength="2" maxLength="120" placeholder="Ej. Forrado completo" /></label>
+                    <label>Descripción <span className="optional">(opcional)</span><textarea name="descripcion" rows="3" maxLength="1000" placeholder="Detalles del trabajo realizado" /></label>
+                    <label>Foto o video<input name="archivo" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/webm" required /></label>
+                    <button className="button button-primary" type="submit" disabled={subiendoMedia}>{subiendoMedia ? "Subiendo…" : "Guardar como borrador →"}</button>
+                  </form>
+                </section>
+                <section className="admin-card"><p className="eyebrow eyebrow-dark">ARCHIVOS DEL TALLER</p><h2>Publicaciones y borradores</h2>
+                  <GaleriaAdmin trabajos={galeriaAdmin} permisos={permisosPublicacion} alCambiarPermiso={(id, autorizado) => setPermisosPublicacion((actual) => ({ ...actual, [id]: autorizado }))} alPublicar={(item) => cambiarPublicacionMedia(item, true)} alRetirar={(item) => cambiarPublicacionMedia(item, false)} alEliminar={eliminarTrabajo} />
+                </section>
+              </>
+            ) : null}
+            {!cargandoAdmin && pestanaAdmin === "servicios" ? (
+              <>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">{servicioEditando ? "EDITAR SERVICIO" : "NUEVO SERVICIO"}</p>
+                  <h2>{servicioEditando ? "Actualiza el catálogo" : "Agrega un servicio"}</h2>
+                  <form className="service-edit-form" key={servicioEditando?.id || "nuevo"} onSubmit={guardarServicio}>
+                    <label>Nombre<input name="nombre" defaultValue={servicioEditando?.nombre || ""} required minLength="2" maxLength="100" placeholder="Ej. Wrap completo" /></label>
+                    <label>Duración en minutos<input name="duracion_minutos" type="number" min="15" max="1440" step="15" defaultValue={servicioEditando?.duracion_minutos || 120} required /></label>
+                    <label>Precio desde (COP)<input name="precio_desde" type="number" min="0" step="1000" defaultValue={servicioEditando?.precio_desde ?? ""} placeholder="Vacío para cotizar" /></label>
+                    <label className="service-description-field">Descripción<textarea name="descripcion" defaultValue={servicioEditando?.descripcion || ""} rows="3" maxLength="1000" /></label>
+                    <div className="service-form-actions"><button className="button button-primary" type="submit" disabled={guardandoServicio}>{guardandoServicio ? "Guardando…" : servicioEditando ? "Guardar cambios" : "Agregar servicio"}</button>{servicioEditando ? <button className="button button-quiet" type="button" onClick={() => setServicioEditando(null)}>Cancelar edición</button> : null}</div>
+                  </form>
+                </section>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">CATÁLOGO</p><h2>Servicios y precios publicados</h2>
+                  <div className="service-admin-list">
+                    {serviciosAdmin.map((servicio) => <article className="service-admin-item" key={servicio.id}>
+                      <div><h3>{servicio.nombre}</h3><p>{servicio.descripcion || "Sin descripción"}</p><small>{duracionTexto(servicio.duracion_minutos)} · {precioTexto(servicio.precio_desde)}</small></div>
+                      <span className={`status-pill ${servicio.activo ? "confirmada" : "cancelada"}`}>{servicio.activo ? "Visible" : "Oculto"}</span>
+                      <div className="service-admin-actions">
+                        <button className="table-action" type="button" onClick={() => { setServicioEditando(servicio); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Editar</button>
+                        <button className="table-action" type="button" onClick={() => cambiarEstadoServicio(servicio)}>{servicio.activo ? "Ocultar" : "Activar"}</button>
+                      </div>
+                    </article>)}
+                    {!serviciosAdmin.length ? <TablaVacia texto="Todavía no hay servicios para administrar." /> : null}
+                  </div>
+                </section>
+              </>
+            ) : null}
+            {!cargandoAdmin && pestanaAdmin === "diseno" ? (
+              <>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">IMAGEN DE PORTADA</p><h2>Actualiza la foto principal</h2>
+                  <p className="gallery-upload-note">La imagen se verá en el espacio donde antes aparecía la ilustración de la moto. La foto MODELO 2 está configurada como imagen inicial.</p>
+                  <img className="design-preview" src={configuracion.imagen_portada_url || imagenModeloDos} alt="Vista previa de la imagen de portada" />
+                  <label className="design-image-picker">Subir otra imagen<input type="file" accept="image/jpeg,image/png,image/webp" onChange={cambiarImagenPortada} disabled={subiendoPortada} /></label>
+                  {subiendoPortada ? <p className="signed-in-note">Subiendo imagen…</p> : null}
+                </section>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">COLORES DE LA PÁGINA</p><h2>Personaliza el estilo</h2>
+                  <form className="design-colors-form" onSubmit={guardarDiseno}>
+                    <label>Color principal (botones y detalles)<span className="color-input-row"><input name="color_primario" type="color" value={configuracion.color_primario} onChange={(event) => setConfiguracion((actual) => ({ ...actual, color_primario: event.target.value }))} /><span>{configuracion.color_primario}</span></span></label>
+                    <label>Color de acento (títulos y resaltados)<span className="color-input-row"><input name="color_acento" type="color" value={configuracion.color_acento} onChange={(event) => setConfiguracion((actual) => ({ ...actual, color_acento: event.target.value }))} /><span>{configuracion.color_acento}</span></span></label>
+                    <label>Fondo oscuro (portada y panel)<span className="color-input-row"><input name="color_fondo_oscuro" type="color" value={configuracion.color_fondo_oscuro} onChange={(event) => setConfiguracion((actual) => ({ ...actual, color_fondo_oscuro: event.target.value }))} /><span>{configuracion.color_fondo_oscuro}</span></span></label>
+                    <button className="button button-primary" type="submit">Guardar colores →</button>
+                  </form>
+                </section>
+              </>
+            ) : null}
           </div>
         </main>
       ) : null}
 
       <footer className="site-footer">
-        <a className="brand footer-brand" href="#inicio" onClick={(event) => { event.preventDefault(); irAVista("inicio"); }}><span className="brand-mark">M</span><span>MOTO<span className="brand-light">FORMA</span></span></a>
-        <span>TU MOTO EN LAS MEJORES MANOS</span>
+        <a className="brand footer-brand" href="#inicio" onClick={(event) => { event.preventDefault(); irAVista("inicio"); }}><img className="brand-logo" src={logo} alt="DWRAPS" /></a>
+        <span>PPF · WRAP · DISEÑO Y CALCOMANÍAS · BOGOTÁ</span>
+        <a className="footer-contact" href="https://wa.me/573011335000" target="_blank" rel="noreferrer">WhatsApp: 301 133 5000</a>
         <button className="footer-admin" onClick={() => irAVista("ingreso-admin")}>Acceso administrador</button>
-        <span className="copyright">© {new Date().getFullYear()} MotoForma.</span>
+        <span className="copyright">Carrera 25B #41-35 sur, Bogotá · © {new Date().getFullYear()} DWRAPS.</span>
       </footer>
-      {aviso ? <div className="toast" role="status">{aviso}</div> : null}
+      {aviso ? <div className="toast show" role="status">{aviso}</div> : null}
     </>
   );
 }
@@ -563,4 +891,42 @@ function TablaValoraciones({ valoraciones, alCambiar }) {
   return <div className="data-table-wrap"><table className="data-table"><thead><tr><th>Cliente / moto</th><th>Proyecto</th><th>Estado</th><th>Acciones</th></tr></thead><tbody>
     {valoraciones.map((item) => <tr key={item.id}><td><strong>{item.nombre_cliente}</strong><br />{item.telefono_cliente}<br />{item.motocicleta}</td><td>{item.nombre_servicio}<br /><span>{item.detalle}</span></td><td><span className={`status-pill ${item.estado}`}>{item.estado}</span></td><td><div className="table-actions">{item.estado === "nueva" ? <><button className="table-action" onClick={() => alCambiar(item.id, "contactada")}>Marcar contactada</button><button className="table-action" onClick={() => alCambiar(item.id, "rechazada")}>Cerrar</button></> : null}{item.estado === "contactada" ? <button className="table-action" onClick={() => alCambiar(item.id, "cerrada")}>Cerrar solicitud</button> : null}</div></td></tr>)}
   </tbody></table></div>;
+}
+
+function ContenidoMedia({ item, clase = "" }) {
+  if (!item.url) return <div className={`gallery-media-empty ${clase}`}>Vista previa no disponible</div>;
+  return item.tipo_mime.startsWith("video/")
+    ? <video className={`gallery-media ${clase}`} src={item.url} controls preload="metadata" />
+    : <img className={`gallery-media ${clase}`} src={item.url} alt={item.titulo} loading="lazy" />;
+}
+
+function Galeria({ trabajos }) {
+  if (!trabajos.length) return <TablaVacia texto="Pronto compartiremos aquí algunos de nuestros trabajos." />;
+  return <div className="gallery-grid">
+    {trabajos.map((item) => <article className="gallery-card" key={item.id}>
+      <ContenidoMedia item={item} />
+      <div className="gallery-card-copy"><h3>{item.titulo}</h3>{item.descripcion ? <p>{item.descripcion}</p> : null}</div>
+    </article>)}
+  </div>;
+}
+
+function GaleriaAdmin({ trabajos, permisos, alCambiarPermiso, alPublicar, alRetirar, alEliminar }) {
+  if (!trabajos.length) return <TablaVacia texto="Aún no has subido fotos o videos." />;
+  return <div className="gallery-admin-list">
+    {trabajos.map((item) => <article className="gallery-admin-item" key={item.id}>
+      <ContenidoMedia item={item} clase="gallery-admin-preview" />
+      <div className="gallery-admin-detail">
+        <div className="gallery-admin-heading"><h3>{item.titulo}</h3><span className={`status-pill ${item.estado === "publicada" ? "confirmada" : "pendiente"}`}>{item.estado === "publicada" ? "Publicada" : "Borrador privado"}</span></div>
+        {item.descripcion ? <p>{item.descripcion}</p> : null}
+        <small>{item.nombre_archivo} · {new Date(item.creada_en).toLocaleDateString("es-CO")}</small>
+        <div className="gallery-admin-actions">
+          {item.estado === "borrador" ? <>
+            <label className="publication-consent"><input type="checkbox" checked={Boolean(permisos[item.id])} onChange={(event) => alCambiarPermiso(item.id, event.target.checked)} /> Confirmo que tengo permiso para publicar este contenido.</label>
+            <button className="button button-primary button-small" type="button" disabled={!permisos[item.id]} onClick={() => alPublicar(item)}>Autorizar y publicar</button>
+          </> : <button className="button button-quiet button-small" type="button" onClick={() => alRetirar(item)}>Retirar publicación</button>}
+          <button className="table-action" type="button" onClick={() => alEliminar(item)}>Eliminar</button>
+        </div>
+      </div>
+    </article>)}
+  </div>;
 }

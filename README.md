@@ -1,50 +1,55 @@
-# MotoForma: agenda para personalizar motos
+# DWRAPS: agenda para personalizar motos
 
-Proyecto inicial en **React + Vite** con una API **Node.js/Express** y un
-esquema **PostgreSQL**. El navegador habla con la API; la API es la única parte
-que accede a la base de datos.
+Aplicación en **React + Vite** conectada directamente con **Supabase**. Supabase administra las cuentas, citas, servicios, horarios y galería; los archivos se guardan en Supabase Storage.
 
-## Ejecutar en tu computadora
+## Preparar la aplicación
 
-Requisitos: Node.js 20 o superior y PostgreSQL 13 o superior.
+Necesitas Node.js 20 o superior.
 
-1. Abre una terminal en la carpeta del proyecto.
-2. Instala las dependencias con `npm install`.
-3. Crea una base de datos llamada `motoforma` y ejecuta `base_datos.sql`.
-4. Copia `.env.example` a `.env` y completa:
-   - `DATABASE_URL`: la dirección de tu PostgreSQL.
-   - `JWT_SECRET`: un secreto aleatorio largo, de al menos 32 caracteres.
-   - `BUSINESS_TIME_ZONE`: zona horaria del taller, por ejemplo `America/Mexico_City`.
-   - `COOKIE_SECURE=false` para desarrollo local. Usa `true` detrás de HTTPS.
-5. Ejecuta `npm run dev` y abre la dirección que indique Vite.
+1. En Supabase, abre **SQL Editor**, pega el contenido de `base_datos.sql` y pulsa **Run**. El script crea las tablas, funciones, permisos y buckets que necesita la aplicación. También completa las columnas que faltan en la tabla existente `galeria_forrados` y conserva sus filas.
+2. Copia `.env.example` como `.env.local`. Confirma que la URL y la clave publicable correspondan a tu proyecto Supabase.
+3. En la terminal, dentro de esta carpeta, ejecuta:
 
-El esquema trae ejemplos de servicios y horarios. Las claves de clientes y
-administradores se guardan como hashes, no en texto legible. Para crear el
-primer administrador, añade temporalmente `ADMIN_NAME`, `ADMIN_EMAIL` y
-`ADMIN_PASSWORD` a `.env`, usa una clave única de al menos 12 caracteres y
-ejecuta `npm run admin:create`. Luego elimina `ADMIN_PASSWORD` del archivo.
+   ```bash
+   npm install
+   npm run dev
+   ```
 
-## Qué incluye
+4. Abre la dirección local que muestra Vite.
 
-- Portada adaptable a computadora y celular, basada en la referencia visual.
-- Calendario interno con horarios consultados a PostgreSQL.
-- Registro e ingreso de clientes por celular y clave.
-- Solicitud de valoración del proyecto.
-- Ingreso separado de administrador y panel de citas/solicitudes.
-- Restricción de base de datos para impedir citas que se traslapen.
+El SQL se puede ejecutar de nuevo si necesitas aplicar una actualización: no elimina las tablas ni sus datos. La clave publicable puede estar en el frontend. **No uses ni publiques una clave `service_role`.**
 
-Si falta `.env` o PostgreSQL no está conectado, la interfaz muestra un aviso y
-desactiva las reservas; no guarda citas ficticias.
+## Crear la cuenta administradora
 
-## Preparar para publicar
+1. En **Supabase → Authentication → Users**, crea el usuario con correo y contraseña.
+2. Abre **SQL Editor**, cambia `CORREO_DEL_ADMIN` por el correo real y ejecuta:
 
-1. Sube el proyecto a un repositorio privado o al repositorio de tu equipo.
-2. Elige un hosting que permita ejecutar Node.js y otro servicio PostgreSQL.
-3. En el hosting, crea las variables de entorno indicadas arriba; no subas `.env`.
-4. Ejecuta `npm run build` para crear la carpeta `dist`.
-5. Configura HTTPS y `COOKIE_SECURE=true`.
-6. Apunta tu dominio al hosting cuando tengas el dominio.
+   ```sql
+   UPDATE public.perfiles AS p
+   SET rol = 'administrador'
+   FROM auth.users AS u
+   WHERE p.id = u.id
+     AND lower(u.email) = lower('CORREO_DEL_ADMIN');
+   ```
 
-No compartas contraseñas de hosting, dominio ni base de datos por el chat.
-Si quieres ayuda para publicar, basta con decir qué proveedor usarás; puedes
-configurar los secretos directamente en su panel siguiendo estas instrucciones.
+3. Entra al sitio y usa **Acceso administrador**, al final de la página.
+
+Las cuentas de clientes usan celular y clave. Para registrar y verificar clientes, habilita un proveedor SMS en **Supabase → Authentication**.
+
+## Lo que se puede administrar
+
+- **Servicios y precios:** crear servicios, editar precios, descripción y duración, o esconder servicios sin borrar su historial.
+- **Diseño de página:** cambiar los colores y subir una imagen de portada. `MODELO 2.png` es la imagen inicial.
+- **Galería:** subir fotos o videos desde computadora o celular. Cada archivo queda privado como borrador hasta marcar la autorización para publicarlo.
+- **Citas y cotizaciones:** revisar las solicitudes y actualizar sus estados.
+
+La galería acepta JPG, PNG, WebP, MP4 y WebM de hasta 100 MB por archivo. La base de datos conserva las imágenes antiguas de `galeria_forrados`; si una fila existente tiene `imagen_url`, el sitio la muestra como contenido publicado sin obligarte a volver a cargar el archivo.
+
+## Publicar el sitio
+
+1. Ejecuta `npm run build`. Vite crea el sitio listo para producción en `dist`.
+2. Publica el proyecto en un hosting estático como Vercel o Netlify.
+3. Añade en el hosting las variables `VITE_SUPABASE_URL` y `VITE_SUPABASE_PUBLISHABLE_KEY`, y despliega otra vez.
+4. En **Supabase → Authentication → URL Configuration**, configura la dirección pública del sitio como URL de redirección permitida.
+
+`base_datos.sql` también carga horarios de ejemplo y servicios iniciales. Después de ejecutarlo, revisa y ajusta estos datos para que coincidan con el horario y los servicios reales del taller.
