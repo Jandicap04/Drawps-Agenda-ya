@@ -86,7 +86,8 @@ CREATE TABLE IF NOT EXISTS public.citas (
 ALTER TABLE public.citas
     ALTER COLUMN cliente_id DROP NOT NULL,
     ADD COLUMN IF NOT EXISTS nombre_cliente TEXT NOT NULL DEFAULT '',
-    ADD COLUMN IF NOT EXISTS telefono_cliente TEXT NOT NULL DEFAULT '';
+    ADD COLUMN IF NOT EXISTS telefono_cliente TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS nombre_servicio TEXT NOT NULL DEFAULT '';
 
 UPDATE public.citas AS c
 SET
@@ -95,6 +96,12 @@ SET
 FROM public.perfiles AS p
 WHERE p.id = c.cliente_id
   AND (c.nombre_cliente = '' OR c.telefono_cliente = '');
+
+UPDATE public.citas AS c
+SET nombre_servicio = s.nombre
+FROM public.servicios AS s
+WHERE s.id = c.servicio_id
+  AND c.nombre_servicio = '';
 
 CREATE TABLE IF NOT EXISTS public.solicitudes_valoracion (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -466,6 +473,7 @@ DECLARE
     v_inicio TIMESTAMPTZ;
     v_fin TIMESTAMPTZ;
     v_duracion INTEGER;
+    v_nombre_servicio TEXT;
     v_cita UUID;
 BEGIN
     IF length(trim(COALESCE(p_nombre_cliente, ''))) NOT BETWEEN 2 AND 120
@@ -486,7 +494,7 @@ BEGIN
         RAISE EXCEPTION 'Ese horario ya no está disponible. Elige otro.';
     END IF;
 
-    SELECT duracion_minutos INTO v_duracion
+    SELECT duracion_minutos, nombre INTO v_duracion, v_nombre_servicio
     FROM public.servicios WHERE id = p_servicio_id AND activo = TRUE;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'El servicio ya no está disponible.';
@@ -496,12 +504,13 @@ BEGIN
     v_fin := v_inicio + make_interval(mins => v_duracion);
     BEGIN
         INSERT INTO public.citas (
-            servicio_id, nombre_cliente, telefono_cliente, motocicleta, inicio, fin, notas
+            servicio_id, nombre_cliente, telefono_cliente, nombre_servicio,
+            motocicleta, inicio, fin, notas
         )
         VALUES (
             p_servicio_id, trim(p_nombre_cliente),
             regexp_replace(trim(p_telefono_cliente), '\s', '', 'g'),
-            trim(p_motocicleta), v_inicio, v_fin, trim(p_notas)
+            v_nombre_servicio, trim(p_motocicleta), v_inicio, v_fin, trim(p_notas)
         )
         RETURNING id INTO v_cita;
     EXCEPTION WHEN exclusion_violation THEN
