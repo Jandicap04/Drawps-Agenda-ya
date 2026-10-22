@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS public.citas (
     servicio_id UUID NOT NULL REFERENCES public.servicios(id) ON DELETE RESTRICT,
     nombre_cliente TEXT NOT NULL DEFAULT '',
     telefono_cliente TEXT NOT NULL DEFAULT '',
+    nombre_servicio TEXT NOT NULL DEFAULT '',
+    duracion_minutos INTEGER NOT NULL DEFAULT 0,
     motocicleta TEXT NOT NULL CHECK (length(trim(motocicleta)) BETWEEN 2 AND 160),
     inicio TIMESTAMPTZ NOT NULL,
     fin TIMESTAMPTZ NOT NULL,
@@ -87,7 +89,8 @@ ALTER TABLE public.citas
     ALTER COLUMN cliente_id DROP NOT NULL,
     ADD COLUMN IF NOT EXISTS nombre_cliente TEXT NOT NULL DEFAULT '',
     ADD COLUMN IF NOT EXISTS telefono_cliente TEXT NOT NULL DEFAULT '',
-    ADD COLUMN IF NOT EXISTS nombre_servicio TEXT NOT NULL DEFAULT '';
+    ADD COLUMN IF NOT EXISTS nombre_servicio TEXT NOT NULL DEFAULT '',
+    ADD COLUMN IF NOT EXISTS duracion_minutos INTEGER NOT NULL DEFAULT 0;
 
 UPDATE public.citas AS c
 SET
@@ -102,6 +105,12 @@ SET nombre_servicio = s.nombre
 FROM public.servicios AS s
 WHERE s.id = c.servicio_id
   AND c.nombre_servicio = '';
+
+UPDATE public.citas AS c
+SET duracion_minutos = s.duracion_minutos
+FROM public.servicios AS s
+WHERE s.id = c.servicio_id
+  AND c.duracion_minutos = 0;
 
 CREATE TABLE IF NOT EXISTS public.solicitudes_valoracion (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -442,11 +451,12 @@ BEGIN
     v_inicio := (p_fecha + p_hora) AT TIME ZONE p_zona_horaria;
     v_fin := v_inicio + make_interval(mins => v_duracion);
     INSERT INTO public.citas (
-        cliente_id, servicio_id, nombre_cliente, telefono_cliente, motocicleta, inicio, fin, notas
+        cliente_id, servicio_id, nombre_cliente, telefono_cliente, nombre_servicio,
+        duracion_minutos, motocicleta, inicio, fin, notas
     )
     SELECT
-        v_usuario, p_servicio_id, p.nombre, COALESCE(p.telefono, ''),
-        trim(p_motocicleta), v_inicio, v_fin, COALESCE(trim(p_notas), '')
+        v_usuario, p_servicio_id, p.nombre, COALESCE(p.telefono, ''), v_nombre,
+        v_duracion, trim(p_motocicleta), v_inicio, v_fin, COALESCE(trim(p_notas), '')
     FROM public.perfiles p
     WHERE p.id = v_usuario
     RETURNING id INTO v_cita;
@@ -504,13 +514,13 @@ BEGIN
     v_fin := v_inicio + make_interval(mins => v_duracion);
     BEGIN
         INSERT INTO public.citas (
-            servicio_id, nombre_cliente, telefono_cliente, nombre_servicio,
+            servicio_id, nombre_cliente, telefono_cliente, nombre_servicio, duracion_minutos,
             motocicleta, inicio, fin, notas
         )
         VALUES (
             p_servicio_id, trim(p_nombre_cliente),
             regexp_replace(trim(p_telefono_cliente), '\s', '', 'g'),
-            v_nombre_servicio, trim(p_motocicleta), v_inicio, v_fin, trim(p_notas)
+            v_nombre_servicio, v_duracion, trim(p_motocicleta), v_inicio, v_fin, trim(p_notas)
         )
         RETURNING id INTO v_cita;
     EXCEPTION WHEN exclusion_violation THEN

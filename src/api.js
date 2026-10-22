@@ -49,8 +49,8 @@ function aplicarZonaHorario(cita) {
     hora: reloj,
     nombre_cliente: cita.perfiles?.nombre || "Cliente",
     telefono_cliente: cita.perfiles?.telefono || "",
-    nombre_servicio: cita.servicios?.nombre || "Servicio",
-    duracion_minutos: cita.servicios?.duracion_minutos || 0,
+    nombre_servicio: cita.nombre_servicio || cita.servicios?.nombre || "Servicio",
+    duracion_minutos: cita.duracion_minutos || cita.servicios?.duracion_minutos || 0,
   };
 }
 
@@ -284,7 +284,7 @@ export const api = {
   async citasAdmin() {
     const { data, error } = await exigirSupabase()
       .from("citas")
-      .select("id, cliente_id, servicio_id, nombre_cliente, telefono_cliente, inicio, estado, notas, motocicleta")
+      .select("id, cliente_id, servicio_id, nombre_cliente, telefono_cliente, nombre_servicio, duracion_minutos, inicio, estado, notas, motocicleta")
       .order("inicio", { ascending: true })
       .limit(500);
     comprobar(error);
