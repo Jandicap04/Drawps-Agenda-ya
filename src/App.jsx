@@ -14,6 +14,7 @@ const configuracionInicial = {
   whatsapp_numero: "573214066140",
   imagen_portada_url: "",
 };
+const ZONA_HORARIA = import.meta.env.VITE_BUSINESS_TIME_ZONE || "America/Bogota";
 
 function enlaceWhatsApp(numero, mensaje = "Hola, me interesa conocer los servicios de DWRAPS.") {
   const numeroLimpio = String(numero || "").replace(/\D/g, "");
@@ -40,6 +41,17 @@ const semana = [
 
 function fechaLocal(date) {
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function fechaHoyEnZona() {
+  const partes = new Intl.DateTimeFormat("en-CA", {
+    timeZone: ZONA_HORARIA,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const valores = Object.fromEntries(partes.map((parte) => [parte.type, parte.value]));
+  return `${valores.year}-${valores.month}-${valores.day}`;
 }
 
 function fechaDesdeLocal(fecha) {
@@ -289,7 +301,8 @@ export default function App() {
   const [resumenAdmin, setResumenAdmin] = useState(null);
   const [citasAdmin, setCitasAdmin] = useState([]);
   const [citaSeleccionada, setCitaSeleccionada] = useState(null);
-  const [fechaAgendaAdmin, setFechaAgendaAdmin] = useState(() => fechaLocal(new Date()));
+  const [fechaAgendaAdmin, setFechaAgendaAdmin] = useState(fechaHoyEnZona);
+  const [hoyEnZona, setHoyEnZona] = useState(fechaHoyEnZona);
   const [vistaAgendaAdmin, setVistaAgendaAdmin] = useState("mes");
   const [valoracionesAdmin, setValoracionesAdmin] = useState([]);
   const [galeria, setGaleria] = useState([]);
@@ -310,6 +323,19 @@ export default function App() {
     () => servicios.find((servicio) => servicio.id === servicioId),
     [servicios, servicioId],
   );
+  const citasActivasAdmin = useMemo(
+    () => citasAdmin.filter((cita) => cita.fecha >= hoyEnZona),
+    [citasAdmin, hoyEnZona],
+  );
+  const citasHistoricasAdmin = useMemo(
+    () => citasAdmin.filter((cita) => cita.fecha < hoyEnZona),
+    [citasAdmin, hoyEnZona],
+  );
+
+  useEffect(() => {
+    const intervalo = window.setInterval(() => setHoyEnZona(fechaHoyEnZona()), 60_000);
+    return () => window.clearInterval(intervalo);
+  }, []);
 
   useEffect(() => {
     let vigente = true;
@@ -983,7 +1009,7 @@ export default function App() {
           <div className="admin-top"><div><p className="eyebrow">PANEL DE ADMINISTRACIÓN</p><h1>Hola, <span>{usuario?.nombre || "administrador"}.</span></h1><p>Revisa las citas y solicitudes de tu taller.</p></div><button className="button button-quiet admin-logout" onClick={cerrarSesion}>Cerrar sesión</button></div>
           <div className="admin-content">
             <div className="admin-tabs">
-              {["resumen", "citas", "valoraciones", "galeria", "servicios", "diseno"].map((tab) => <button key={tab} className={`admin-tab ${pestanaAdmin === tab ? "active" : ""}`} onClick={() => setPestanaAdmin(tab)}>{tab === "resumen" ? "Resumen" : tab === "citas" ? <>Citas <span className="tab-count">{citasAdmin.length}</span></> : tab === "valoraciones" ? <>Cotizaciones <span className="tab-count">{valoracionesAdmin.length}</span></> : tab === "galeria" ? <>Galería <span className="tab-count">{galeriaAdmin.length}</span></> : tab === "servicios" ? "Servicios y precios" : "Diseño de página"}</button>)}
+              {["resumen", "citas", "valoraciones", "galeria", "servicios", "diseno"].map((tab) => <button key={tab} className={`admin-tab ${pestanaAdmin === tab ? "active" : ""}`} onClick={() => setPestanaAdmin(tab)}>{tab === "resumen" ? "Resumen" : tab === "citas" ? <>Citas <span className="tab-count">{citasActivasAdmin.length}</span></> : tab === "valoraciones" ? <>Cotizaciones <span className="tab-count">{valoracionesAdmin.length}</span></> : tab === "galeria" ? <>Galería <span className="tab-count">{galeriaAdmin.length}</span></> : tab === "servicios" ? "Servicios y precios" : "Diseño de página"}</button>)}
             </div>
             {cargandoAdmin ? <TablaVacia texto="Cargando datos del taller…" /> : null}
             {!cargandoAdmin && pestanaAdmin === "resumen" ? <>
@@ -993,7 +1019,7 @@ export default function App() {
                 <article className="stat-card"><span>Cotizaciones nuevas</span><strong>{resumenAdmin?.valoraciones_nuevas ?? 0}</strong><small>Por revisar</small></article>
                 <article className="stat-card"><span>Servicios activos</span><strong>{resumenAdmin?.servicios_activos ?? 0}</strong><small>En tu catálogo</small></article>
               </div>
-              <div className="admin-card"><div className="admin-card-head"><div><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Próximas citas</h2></div><button className="inline-button" onClick={() => setPestanaAdmin("citas")}>Ver todas →</button></div><TablaCitas citas={citasAdmin.filter((cita) => ["pendiente", "confirmada"].includes(cita.estado)).slice(0, 5)} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} alSeleccionar={setCitaSeleccionada} /></div>
+              <div className="admin-card"><div className="admin-card-head"><div><p className="eyebrow eyebrow-dark">AGENDA</p><h2>Próximas citas</h2></div><button className="inline-button" onClick={() => setPestanaAdmin("citas")}>Ver todas →</button></div><TablaCitas citas={citasActivasAdmin.filter((cita) => ["pendiente", "confirmada"].includes(cita.estado)).slice(0, 5)} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} alSeleccionar={setCitaSeleccionada} /></div>
             </> : null}
             {!cargandoAdmin && pestanaAdmin === "citas" ? (
               <>
@@ -1001,7 +1027,7 @@ export default function App() {
                   <p className="eyebrow eyebrow-dark">AGENDA DEL TALLER</p>
                   <h2>Calendario de citas</h2>
                   <AgendaAdmin
-                    citas={citasAdmin}
+                    citas={citasActivasAdmin}
                     fecha={fechaAgendaAdmin}
                     modo={vistaAgendaAdmin}
                     alCambiarFecha={setFechaAgendaAdmin}
@@ -1011,8 +1037,13 @@ export default function App() {
                 </section>
                 <section className="admin-card">
                   <p className="eyebrow eyebrow-dark">GESTIÓN</p>
-                  <h2>Detalle y estado de las citas</h2>
-                  <TablaCitas citas={citasAdmin} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} alSeleccionar={setCitaSeleccionada} />
+                  <h2>Detalle y estado de las citas próximas</h2>
+                  <TablaCitas citas={citasActivasAdmin} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} alSeleccionar={setCitaSeleccionada} />
+                </section>
+                <section className="admin-card">
+                  <p className="eyebrow eyebrow-dark">HISTORIAL</p>
+                  <h2>Citas de días anteriores</h2>
+                  <TablaCitas citas={[...citasHistoricasAdmin].reverse()} alCambiar={actualizarEstadoCita} alReprogramar={reprogramarCita} alSeleccionar={setCitaSeleccionada} />
                 </section>
               </>
             ) : null}

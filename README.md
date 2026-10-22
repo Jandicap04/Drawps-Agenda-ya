@@ -52,6 +52,7 @@ Las cotizaciones piden los datos de contacto y del proyecto, abren WhatsApp con 
 - **Galería:** subir fotos o videos desde computadora o celular. Cada archivo queda privado como borrador hasta marcar la autorización para publicarlo.
 - La portada también muestra los modelos de moto disponibles en la carpeta del proyecto al final de **Hechos para rodar**.
 - **Citas:** las solicitudes guardadas aparecen en el calendario administrativo por día, semana o mes con el nombre, horario y servicio. El calendario se actualiza automáticamente mientras el panel está abierto; al seleccionar una solicitud se muestran el celular, la moto, el servicio y el trabajo solicitado, sin depender del mensaje de WhatsApp.
+- Las citas salen de la agenda activa cuando pasa su fecha, según la zona horaria del taller. Se conservan en Supabase y aparecen en el historial de días anteriores dentro de **Administración → Citas**.
 - Desde la tabla administrativa se puede cambiar la fecha y hora de una cita activa; el sistema valida el horario del taller y evita conflictos con otras reservas.
 - **Cotizaciones:** revisar en su propia sección el nombre, celular, moto y trabajo solicitado, sin afectar la disponibilidad de citas.
 
