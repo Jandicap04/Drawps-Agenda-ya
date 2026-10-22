@@ -236,7 +236,11 @@ export const api = {
       p_notas: notas,
       p_zona_horaria: ZONA_HORARIA,
     });
+    if (error?.code === "PGRST202" || error?.code === "42883") {
+      throw new Error("Supabase no tiene instalada la función para guardar citas. Ejecuta el archivo base_datos.sql en el SQL Editor de tu proyecto y vuelve a intentar.");
+    }
     comprobar(error);
+    if (!data) throw new Error("Supabase no confirmó el registro de la cita. Inténtalo de nuevo.");
     return data;
   },
 

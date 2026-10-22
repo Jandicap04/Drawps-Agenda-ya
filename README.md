@@ -34,7 +34,7 @@ El SQL se puede ejecutar de nuevo si necesitas aplicar una actualización: no el
 
 3. Entra al sitio y usa **Acceso administrador**, al final de la página.
 
-Las personas no necesitan crear una cuenta para usar el sitio. Al reservar, eligen servicio y horario, y dejan su nombre, celular de contacto, moto y descripción del trabajo; el sitio guarda la cita y abre WhatsApp con esos datos. Las reservas bloquean el horario elegido para que no se cruce otra cita. El inicio de sesión queda reservado para la persona administradora.
+Las personas no necesitan crear una cuenta para usar el sitio. Al reservar, eligen servicio y horario, y dejan su nombre, celular de contacto, moto y descripción del trabajo; primero se guarda la cita en Supabase y solo después se abre WhatsApp con esos datos. Si no se pudo guardar, se muestra el error y no se abre WhatsApp. Las reservas bloquean el horario elegido para que no se cruce otra cita. El inicio de sesión queda reservado para la persona administradora.
 
 ## Configurar WhatsApp del taller
 

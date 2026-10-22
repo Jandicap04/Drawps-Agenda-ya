@@ -280,6 +280,7 @@ export default function App() {
   const [mes, setMes] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
   const [fecha, setFecha] = useState("");
   const [hora, setHora] = useState("");
+  const [guardandoCita, setGuardandoCita] = useState(false);
   const [horarios, setHorarios] = useState([]);
   const [cargandoHorarios, setCargandoHorarios] = useState(false);
   const [errorHorarios, setErrorHorarios] = useState("");
@@ -504,7 +505,12 @@ export default function App() {
       `Trabajo que necesito: ${notas}`,
     ].join("\n");
     const enlace = enlaceWhatsApp(configuracion.whatsapp_numero, mensajeWhatsApp);
-    if (enlace) window.open(enlace, "_blank", "noopener,noreferrer");
+    const pestañaWhatsApp = enlace ? window.open("about:blank", "_blank") : null;
+    if (pestañaWhatsApp) {
+      pestañaWhatsApp.document.title = "Guardando solicitud de cita";
+      pestañaWhatsApp.document.body.textContent = "Guardando tu solicitud. WhatsApp se abrirá cuando la cita quede confirmada.";
+    }
+    setGuardandoCita(true);
     try {
       await api.solicitarCita({
         nombre,
@@ -518,16 +524,26 @@ export default function App() {
       formulario.reset();
       setHora("");
       setFecha("");
+      if (enlace && pestañaWhatsApp && !pestañaWhatsApp.closed) {
+        pestañaWhatsApp.location.replace(enlace);
+      } else if (enlace) {
+        mostrarAviso("La cita quedó guardada. WhatsApp se abrirá en esta pestaña.");
+        window.location.assign(enlace);
+        return;
+      }
       mostrarAviso(enlace
         ? "La cita quedó guardada y enviamos el mensaje preparado por WhatsApp."
         : "La cita quedó guardada. El taller se comunicará contigo.");
       irAVista("inicio");
     } catch (error) {
-      mostrarAviso(error.message);
+      pestañaWhatsApp?.close();
+      mostrarAviso(`No se pudo guardar la cita: ${error.message}`);
       if (error.message.toLowerCase().includes("horario")) {
         setHora("");
         setFecha("");
       }
+    } finally {
+      setGuardandoCita(false);
     }
   }
 
@@ -922,7 +938,7 @@ export default function App() {
                   <label>Celular<input name="telefono" type="tel" inputMode="tel" autoComplete="tel" required minLength="8" maxLength="20" placeholder="Tu número de contacto" /></label>
                   <label className="field-wide">Marca, modelo y año de tu moto<input name="motocicleta" placeholder="Ej. Yamaha MT-07, 2023" required minLength="2" maxLength="160" /></label>
                   <label className="field-wide">¿Qué trabajo quieres realizar?<textarea name="notas" rows="3" placeholder="Cuéntanos qué quieres hacerle a tu moto" required minLength="5" maxLength="2000" /></label>
-                  <div className="field-wide form-foot"><p>Tu solicitud y horario quedan guardados. El taller confirmará la cita contigo.</p><button className="button button-primary" type="submit" disabled={!apiConectada || !fecha || !hora}>Enviar solicitud por WhatsApp →</button></div>
+                  <div className="field-wide form-foot"><p>Primero guardaremos la solicitud y el horario; después se abrirá WhatsApp para enviar los datos al taller.</p><button className="button button-primary" type="submit" disabled={!apiConectada || !fecha || !hora || guardandoCita}>{guardandoCita ? "Guardando cita…" : "Guardar solicitud y abrir WhatsApp →"}</button></div>
                 </div>
               </form>
             </div>
